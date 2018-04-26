@@ -35,7 +35,6 @@ if [ -z "$PANDORA_DB_PASSWORD" ]; then
 	exit 1
 fi
 
-mv -f /tmp/pandorafms/pandora_console /var/www/html
 cd /var/www/html/pandora_console/include
 cat > config.php <<- 'EOF'
 <?php
@@ -74,7 +73,6 @@ cd /var/www/html/pandora_console && mv -f install.php install.php.done
 
 #Rock n' roll!
 /etc/init.d/crond start &
-/etc/init.d/ntpd start &
 
 rm -rf /run/httpd/*
 exec /usr/sbin/apachectl -D FOREGROUND

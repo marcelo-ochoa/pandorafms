@@ -17,8 +17,8 @@ RUN { \
         echo 'enabled=1'; \
 } > /etc/yum.repos.d/pandorafms.repo
 
-RUN yum -y update; yum clean all;
-RUN yum install -y \ 
+RUN yum -y update && yum clean all && \
+	yum install -y \ 
 	git \
 	cronie \
 	ntp \
@@ -53,7 +53,10 @@ RUN yum install -y \
 	
 
 #Clone the repo
-RUN git clone -b develop https://github.com/pandorafms/pandorafms.git /tmp/pandorafms
+RUN git clone -b develop https://github.com/pandorafms/pandorafms.git /tmp/pandorafms && \
+	/usr/sbin/useradd -d /home/pandora -s /bin/false -M -g 0 pandora && \
+	cd /tmp/pandorafms/pandora_server && ./pandora_server_installer --install && \
+	rm -rf /tmp/pandorafms
 
 #Exposing ports for: Tentacle protocol
 EXPOSE 41121
