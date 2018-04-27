@@ -63,6 +63,8 @@ EXPOSE 41121
 
 # Simple startup script to avoid some issues observed with container restart
 ADD docker_entrypoint.sh /entrypoint.sh
+ADD generate_conf_from_env.sh /generate_conf_from_env.sh
+ADD run_cron.sh /run_cron.sh
 RUN chmod -v +x /entrypoint.sh
 
 CMD ["/entrypoint.sh"]

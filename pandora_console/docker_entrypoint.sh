@@ -71,8 +71,5 @@ cd /var/www/html/pandora_console && mv -f install.php install.php.done
 #Create the pandora user
 /usr/sbin/useradd -d /home/pandora -s /bin/false -M -g 0 pandora
 
-#Rock n' roll!
-/etc/init.d/crond start &
-
 rm -rf /run/httpd/*
 exec /usr/sbin/apachectl -D FOREGROUND
