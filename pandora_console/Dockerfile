@@ -1,5 +1,5 @@
 FROM centos:centos6
-MAINTAINER Pandora FMS Team <info@pandorafms.com>
+LABEL maintainer="Pandora FMS Team <info@pandorafms.com>"
 
 RUN { \
 	echo '[EPEL]'; \
