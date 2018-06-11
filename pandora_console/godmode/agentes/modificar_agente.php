@@ -60,7 +60,7 @@ $viewtab['active'] = false;
 $onheader = array('view' => $viewtab);
 
 // Header
-ui_print_page_header (__('Agents defined in Pandora'), "images/agent_mc.png", false, "", true, $onheader);
+ui_print_page_header (__('Agents defined in %s', get_product_name()), "images/agent_mc.png", false, "", true, $onheader);
 
 // Perform actions
 $agent_to_delete = (int)get_parameter('borrar_agente');
@@ -680,7 +680,7 @@ if ($agents !== false) {
 				echo ' onClick="if (!confirm(\' '.__('Are you sure?').'\')) return false;">';
 			}
 			else{
-				echo ' onClick="if (!confirm(\' '.__('You are going to delete a cluster agent. Are you sure?').'\')) return false;">';
+				echo ' onClick="if (!confirm(\' '.__('WARNING! - You are going to delete a cluster agent. Are you sure?').'\')) return false;">';
 			}
 			
 			echo html_print_image('images/cross.png', true, array("border" => '0')) . "</a>";
