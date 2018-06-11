@@ -34,6 +34,7 @@ enterprise_include_once ('include/functions_local_components.php');
 enterprise_include_once ('include/functions_events.php');
 enterprise_include_once ('include/functions_agents.php');
 enterprise_include_once ('include/functions_modules.php');
+enterprise_include_once ('include/functions_clusters.php');
 
 /**
  * Parse the "other" parameter.
@@ -1358,7 +1359,7 @@ function api_set_new_agent($thrash1, $thrash2, $other, $thrash3) {
 		returnError('id_os_not_exist', 'The OS don`t exist.');
 	}
 	else if (db_get_value_sql($sql1) === false) {
-		returnError('server_not_exist', 'The Pandora Server don`t exist.');
+		returnError('server_not_exist', 'The ' . get_product_name() . ' Server don`t exist.');
 	}
 	else {
 		$idAgente = db_process_sql_insert ('tagente', 
@@ -6654,7 +6655,7 @@ function api_get_graph_module_data($id, $thrash1, $other, $thrash2) {
 	if (defined ('METACONSOLE')) {
 		return;
 	}
-	
+
 	$period = $other['data'][0];
 	$width = $other['data'][1];
 	$height = $other['data'][2];
@@ -6666,38 +6667,40 @@ function api_get_graph_module_data($id, $thrash1, $other, $thrash2) {
 	$avg_only = 0;
 	$start_date = $other['data'][4];
 	$date = strtotime($start_date);
-	
-	
+
 	$homeurl = '../';
 	$ttl = 1;
-	
+
 	global $config;
 	$config['flash_charts'] = 0;
-	
-	$image = grafico_modulo_sparse ($id, $period, $draw_events,
-		$width, $height , $label, null,
-		$draw_alerts, $avg_only, false,
-		$date, '', 0, 0,true,
-		false, $homeurl, $ttl);
-	
-	preg_match("/<div class=\"nodata_text\">/",
-		$image, $match);
-	
-	if (!empty($match[0])) {
-		echo "Error no data";
-	}
-	else {
-		// Extract url of the image from img tag
-		preg_match("/src='([^']*)'/i", $image, $match);
-		
-		if (empty($match[1])) {
-			echo "Error getting graph";
-		}
-		else {
-			header('Content-type: image/png');
-			header('Location: ' . $match[1]);
-		}
-	}
+
+	$params =array(
+		'agent_module_id'     => $id,
+		'period'              => $period,
+		'show_events'         => $draw_events,
+		'width'               => $width,
+		'height'              => $height,
+		'show_alerts'         => $draw_alerts,
+		'date'                => $date,
+		'unit'                => '',
+		'baseline'            => 0,
+		'return_data'         => 0,
+		'show_title'          => true,
+		'only_image'          => true,
+		'homeurl'             => $homeurl,
+		'compare'             => false,
+		'show_unknown'        => true,
+		'backgroundColor'     => 'white',
+		'percentil'           => null,
+		'type_graph'          => $config['type_module_charts'],
+		'fullscale'           => false,
+		'return_img_base_64'  => true
+	);
+
+	$image = grafico_modulo_sparse($params);
+
+	header('Content-type: text/html');
+	returnData('string', array('type' => 'string', 'data' => '<img src="data:image/jpeg;base64,' . $image . '">'));
 }
 
 /**
@@ -7721,9 +7724,9 @@ function api_set_gis_agent_only_position($id_agent, $trash1, $other, $return_typ
 		if ($correct) {
 			$correct = agents_update_gis($id_agent, $latitude,
 				$longitude, $altitude, 0, 1, date( 'Y-m-d H:i:s'), null,
-				1, __('Save by Pandora Console'),
-				__('Update by Pandora Console'),
-				__('Insert by Pandora Console'));
+				1, __('Save by %s Console', get_product_name()),
+				__('Update by %s Console', get_product_name()),
+				__('Insert by %s Console', get_product_name()));
 		}
 	}
 	
@@ -8822,6 +8825,40 @@ function api_get_agent_name($id_agent, $trash1, $trash2, $returnType) {
 }
 
 /**
+ *  Return the ID or an hash of IDs of the detected given agents
+ * 
+ *  @param array or value $data
+ * 
+ * 
+**/
+function api_get_agent_id($trash1, $trash2, $data, $returnType) {
+	$response;
+
+	if (is_metaconsole()) {
+		return;
+	}
+	if (empty($returnType)) {
+		$returnType = "json";
+	}
+
+	$response = array();
+
+	if ($data["type"] == "array") {
+		$response["type"] = "array";
+		$response["data"] = array();
+
+		foreach ($data["data"] as $name) {
+			$response["data"][$name] = agents_get_agent_id($name, 1);
+		}
+	} else {
+		$response["type"] = "string";
+		$response["data"] = agents_get_agent_id($data["data"], 1);
+	}
+
+	returnData($returnType, $response);
+}
+
+/**
  * Agent alias for a given id
  * 
  * @param int $id_agent 
@@ -9111,7 +9148,7 @@ function api_set_create_event($id, $trash1, $other, $returnType) {
 			$values['source'] = $other['data'][14];
 		}
 		else {
-			$values['source'] = "Pandora";
+			$values['source'] = get_product_name();
 		}
 		
 		if ($other['data'][15] != '') {
@@ -10004,25 +10041,24 @@ function api_set_delete_special_day($id_special_day, $thrash2, $thrash3, $thrash
  *
  */
 function api_get_module_graph($id_module, $thrash2, $other, $thrash4) {
-	
 	global $config;
 
 	if (defined ('METACONSOLE')) {
 		return;
 	}
-	
+
 	if (is_nan($id_module) || $id_module <= 0) {
 		returnError('error_module_graph', __(''));
 		return;
 	}
-	
+
 	$id_exist = (bool) db_get_value ('id_agente_modulo', 'tagente_modulo', 'id_agente_modulo', $id_module);
-	
+
 	if (!$id_exist) {
 		// returnError('id_not_found');
 		return;
 	}
-	
+
 	$graph_seconds =
 		(!empty($other) && isset($other['data'][0]))
 		?
@@ -10031,7 +10067,7 @@ function api_get_module_graph($id_module, $thrash2, $other, $thrash4) {
 		SECONDS_1HOUR; // 1 hour by default
 
 	$graph_threshold =
-		(!empty($other) && isset($other['data'][2]))
+		(!empty($other) && isset($other['data'][2]) && $other['data'][2])
 		?
 		$other['data'][2]
 		:
@@ -10041,80 +10077,38 @@ function api_get_module_graph($id_module, $thrash2, $other, $thrash4) {
 		// returnError('error_module_graph', __(''));
 		return;
 	}
-	
-	$id_module_type = modules_get_agentmodule_type ($id_module);
-	$module_type = modules_get_moduletype_name ($id_module_type);
-	
-	$string_type = strpos($module_type,'string');
-	// Get the html item
-	if ($string_type === false) {
-		$graph_html = grafico_modulo_sparse(
-			$id_module, $graph_seconds, false, 600, 300, '',
-			'', false, false, true, time(), '', 0, 0, true, true,
-			ui_get_full_url(false) . '/', 1, false, '', false, true,
-			true, 'white', null, false, false, $config['type_module_charts'], 
-			false, false);
+
+	$params =array(
+		'agent_module_id'     => $id_module,
+		'period'              => $graph_seconds,
+		'show_events'         => false,
+		'width'               => $width,
+		'height'              => $height,
+		'show_alerts'         => false,
+		'date'                => time(),
+		'unit'                => '',
+		'baseline'            => 0,
+		'return_data'         => 0,
+		'show_title'          => true,
+		'only_image'          => true,
+		'homeurl'             => ui_get_full_url(false) . '/',
+		'compare'             => false,
+		'show_unknown'        => true,
+		'backgroundColor'     => 'white',
+		'percentil'           => null,
+		'type_graph'          => $config['type_module_charts'],
+		'fullscale'           => false,
+		'return_img_base_64'  => true,
+		'image_treshold'      => $graph_threshold
+	);
+
+	$graph_html = grafico_modulo_sparse($params);
+
+	if($other['data'][1]){
+		header('Content-type: text/html');
+		returnData('string', array('type' => 'string', 'data' => '<img src="data:image/jpeg;base64,' . $graph_html . '">'));
 	} else {
-		$graph_html = grafico_modulo_string(
-			$id_module, $graph_seconds, false, 600, 300, '',
-			'', false, false, true, time(), true, ui_get_full_url(false) . '/', 
-			'', 1, true);
-	}
-
-	$graph_image_file_encoded = false;
-	if (preg_match("/<img src='(.+)'./", $graph_html, $matches)) {
-		$file_url = $matches[1];
-
-		if (preg_match("/\?(.+)&(.+)&(.+)&(.+)/", $file_url,$parameters)) {
-			array_shift ($parameters);
-			foreach ($parameters as $parameter){
-				$value = explode ("=",$parameter);
-				
-				if (strcmp($value[0], "static_graph") == 0){
-					$static_graph = $value[1];
-				}
-				elseif (strcmp($value[0], "graph_type") == 0){
-					$graph_type = $value[1];
-				}
-				elseif (strcmp($value[0], "ttl") == 0){
-					$ttl = $value[1];
-				}
-				elseif (strcmp($value[0], "id_graph") == 0){
-					$id_graph = $value[1];
-				}
-			}
-		}
-	}
-
-	// Check values are OK
-	if ( (isset ($graph_type))
-	&& (isset ($ttl))
-	&& (isset ($id_graph))) {
-		$_GET["ttl"]             = $ttl;
-		$_GET["id_graph"]        = $id_graph;
-		$_GET["graph_type"]      = $graph_type;
-		$_GET["static_graph"]    = $static_graph;
-		$_GET["graph_threshold"] = $graph_threshold;
-		$_GET["id_module"]       = $id_module;
-	}
-
-	ob_start();
-	include (__DIR__ . "/graphs/functions_pchart.php");
-	$output =  ob_get_clean();
-
-	$graph_image_file_encoded = base64_encode($output);
-	if (empty($graph_image_file_encoded)) {
-		// returnError('error_module_graph', __(''));
-	}
-	else {
-		if($other['data'][1]){
-			header('Content-type: text/html');
-			returnData('string', array('type' => 'string', 'data' => '<img src="data:image/jpeg;base64,' . $graph_image_file_encoded . '">'));
-		} else {
-			returnData('string', array('type' => 'string', 'data' => $graph_image_file_encoded));	
-		}
-		// To show only the base64 code, call returnData as:
-		// returnData('string', array('type' => 'string', 'data' => $graph_image_file_encoded));
+		returnData('string', array('type' => 'string', 'data' => $graph_html));
 	}
 }
 
@@ -10216,7 +10210,7 @@ function api_set_new_cluster($thrash1, $thrash2, $other, $thrash3) {
 			db_pandora_audit("Report management", "Fail try to create agent");
 		
 		returnData('string',
-			array('type' => 'string', 'data' => (int)((bool)$id_cluster)));
+			array('type' => 'string', 'data' => (int)$id_cluster));
 		}
 	}
 	
@@ -10265,13 +10259,13 @@ function api_set_new_cluster($thrash1, $thrash2, $other, $thrash3) {
 			// 	
 				if($element["type"] == "AA"){
 			// 								
-						$tcluster_module = db_process_sql_insert('tcluster_item',array('name'=>$element["name"],'id_cluster'=>$element["id_cluster"],'critical_limit'=>$element["critical_limit"],'warning_limit'=>$element["warning_limit"]));
+						$tcluster_module = db_process_sql_insert('tcluster_item',array('name'=>io_safe_input($element["name"]),'id_cluster'=>$element["id_cluster"],'critical_limit'=>$element["critical_limit"],'warning_limit'=>$element["warning_limit"]));
 						
 						$id_agent = db_process_sql('select id_agent from tcluster where id = '.$element["id_cluster"]);
 						
 						$id_parent_modulo = db_process_sql('select id_agente_modulo from tagente_modulo where id_agente = '.$id_agent[0]['id_agent'].' and nombre = "Cluster status"');
 						
-						$get_module_type = db_process_sql('select id_tipo_modulo,descripcion,min_warning,min_critical,module_interval from tagente_modulo where nombre = "'.$element["name"].'" limit 1');
+						$get_module_type = db_process_sql('select id_tipo_modulo,descripcion,min_warning,min_critical,module_interval from tagente_modulo where nombre = "'.io_safe_input($element["name"]).'" limit 1');
 						
 						$get_module_type_value = $get_module_type[0]['id_tipo_modulo'];
 						
@@ -10284,7 +10278,7 @@ function api_set_new_cluster($thrash1, $thrash2, $other, $thrash3) {
 						$get_module_interval_value = $get_module_type[0]['module_interval'];
 						
 						$values_module = array(
-							'nombre' => $element["name"],
+							'nombre' => io_safe_input($element["name"]),
 							'id_modulo' => 0,
 							'prediction_module' => 6,
 							'id_agente' => $id_agent[0]['id_agent'],
@@ -10301,6 +10295,8 @@ function api_set_new_cluster($thrash1, $thrash2, $other, $thrash3) {
 							
 														
 						$id_module = 	modules_create_agent_module($values_module['id_agente'],$values_module['nombre'],$values_module);
+						
+						$launch_cluster = db_process_sql('update tagente_modulo set flag = 1 where custom_integer_1 = '.$element["id_cluster"].' and nombre = "Cluster status"');
 						
 						if ($tcluster_module !== false){	
 							db_pandora_audit("Report management", "Module #".$element["name"]." assigned to cluster #".$element["id_cluster"]);
@@ -10319,7 +10315,7 @@ function api_set_new_cluster($thrash1, $thrash2, $other, $thrash3) {
 							
 							$tcluster_balanced_module = db_process_sql_insert('tcluster_item',array('name'=>$element["name"],'id_cluster'=>$element["id_cluster"],'item_type'=>"AP",'is_critical'=>$element["is_critical"]));
 							
-							$get_module_type = db_process_sql('select id_tipo_modulo,descripcion,min_warning,min_critical,module_interval from tagente_modulo where nombre = "'.$element["name"].'" limit 1');
+							$get_module_type = db_process_sql('select id_tipo_modulo,descripcion,min_warning,min_critical,module_interval from tagente_modulo where nombre = "'.io_safe_input($element["name"]).'" limit 1');
 							
 							$get_module_type_value = $get_module_type[0]['id_tipo_modulo'];
 							
@@ -10369,6 +10365,8 @@ function api_set_new_cluster($thrash1, $thrash2, $other, $thrash3) {
 								);
 								
 							$id_module = 	modules_create_agent_module($values_module['id_agente'],$values_module['nombre'],$values_module);
+							
+							$launch_cluster = db_process_sql('update tagente_modulo set flag = 1 where custom_integer_1 = '.$element["id_cluster"].' and nombre = "Cluster status"');
 													
 							if ($tcluster_balanced_module !== false){	
 								db_pandora_audit("Report management", "Module #".$element["name"]." assigned to cluster #".$element["id_cluster"]);
@@ -10631,5 +10629,95 @@ function api_get_cluster_status($id_cluster, $trash1, $trash2, $returnType) {
 	
 	returnData($returnType, $data);
 }
+
+function api_get_cluster_id_by_name($cluster_name, $trash1, $trash2, $returnType) {
+	if (defined ('METACONSOLE')) {
+		return;
+	}
+	
+	$cluster_name = io_safe_output($cluster_name);
+	
+	$value = cluster_get_id_by_name($cluster_name);
+	
+	if ($value === false) {
+		returnError('id_not_found', $returnType);
+	}
+	
+	$data = array('type' => 'string', 'data' => $value);
+	
+	returnData($returnType, $data);
+}
+
+function api_get_agents_id_name_by_cluster_id($cluster_id, $trash1, $trash2, $returnType) {
+	if (defined ('METACONSOLE')) {
+		return;
+	}
+	
+	$all_agents = cluster_get_agents_id_name_by_cluster_id($cluster_id);	
+	
+	if (count($all_agents) > 0 and $all_agents !== false) {
+		$data = array('type' => 'array', 'data' => $all_agents);
+		
+		returnData('json', $data);
+	}
+	else {
+		returnError('error_agents', 'No agents retrieved.');
+	}
+}
+
+function api_get_agents_id_name_by_cluster_name($cluster_name, $trash1, $trash2, $returnType) {
+	if (defined ('METACONSOLE')) {
+		return;
+	}
+		
+	$all_agents = cluster_get_agents_id_name_by_cluster_name($cluster_name);
+	
+	if (count($all_agents) > 0 and $all_agents !== false) {
+		$data = array('type' => 'array', 'data' => $all_agents);
+		
+		returnData('json', $data);
+	}
+	else {
+		returnError('error_agents', 'No agents retrieved.');
+	}
+}
+
+function api_get_modules_id_name_by_cluster_id ($cluster_id){
+	if (defined ('METACONSOLE')) {
+		return;
+	}
+	
+	$all_modules = cluster_get_modules_id_name_by_cluster_id($cluster_id);	
+	
+	if (count($all_modules) > 0 and $all_modules !== false) {
+		$data = array('type' => 'array', 'data' => $all_modules);
+		
+		returnData('json', $data);
+	}
+	else {
+		returnError('error_agent_modules', 'No modules retrieved.');
+	}
+	
+}
+
+function api_get_modules_id_name_by_cluster_name ($cluster_name){
+	if (defined ('METACONSOLE')) {
+		return;
+	}
+	
+	$all_modules = cluster_get_modules_id_name_by_cluster_name($cluster_name);	
+	
+	if (count($all_modules) > 0 and $all_modules !== false) {
+		$data = array('type' => 'array', 'data' => $all_modules);
+		
+		returnData('json', $data);
+	}
+	else {
+		returnError('error_agent_modules', 'No modules retrieved.');
+	}
+	
+}
+
+
 
 ?>

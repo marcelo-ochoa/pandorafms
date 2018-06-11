@@ -1123,6 +1123,7 @@ UPDATE talert_actions SET   `field4` = 'integria',
 							`field9` = 'admin',
 							`field10` = '_alert_description_'
 WHERE `id` = 4 AND `id_alert_command` = 11;
+UPDATE talert_actions SET name='Monitoring&#x20;Event' WHERE name='Pandora&#x20;FMS&#x20;Event';
 ALTER TABLE talert_actions ADD COLUMN `field11` TEXT NOT NULL DEFAULT "";
 ALTER TABLE talert_actions ADD COLUMN `field12` TEXT NOT NULL DEFAULT "";
 ALTER TABLE talert_actions ADD COLUMN `field13` TEXT NOT NULL DEFAULT "";
@@ -1159,10 +1160,13 @@ ALTER TABLE titem MODIFY `source_data` int(10) unsigned;
 INSERT INTO `tconfig` (`token`, `value`) VALUES ('big_operation_step_datos_purge', '100');
 INSERT INTO `tconfig` (`token`, `value`) VALUES ('small_operation_step_datos_purge', '1000');
 INSERT INTO `tconfig` (`token`, `value`) VALUES ('days_autodisable_deletion', '30');
-INSERT INTO `tconfig` (`token`, `value`) VALUES ('MR', 13);
+INSERT INTO `tconfig` (`token`, `value`) VALUES ('MR', 16);
+INSERT INTO `tconfig` (`token`, `value`) VALUES ('custom_docs_logo', 'default_docs.png');
+INSERT INTO `tconfig` (`token`, `value`) VALUES ('custom_support_logo', 'default_support.png');
+INSERT INTO `tconfig` (`token`, `value`) VALUES ('custom_logo_white_bg_preview', 'pandora_logo_head_white_bg.png');
 UPDATE tconfig SET value = 'https://licensing.artica.es/pandoraupdate7/server.php' WHERE token='url_update_manager';
 DELETE FROM `tconfig` WHERE `token` = 'current_package_enterprise';
-INSERT INTO `tconfig` (`token`, `value`) VALUES ('current_package_enterprise', '720');
+INSERT INTO `tconfig` (`token`, `value`) VALUES ('current_package_enterprise', '723');
 
 -- ---------------------------------------------------------------------
 -- Table `tconfig_os`
@@ -1509,9 +1513,7 @@ create table IF NOT EXISTS `tcluster`(
 		`description` text not null default '',
 		`group` int(10) unsigned NOT NULL default '0',
 		`id_agent` int(10) unsigned NOT NULL,
-		PRIMARY KEY (`id`),
-		FOREIGN KEY (`id_agent`) REFERENCES tagente(`id_agente`)
-			ON UPDATE CASCADE
+		PRIMARY KEY (`id`)
 ) engine=InnoDB DEFAULT CHARSET=utf8;
 
 -- ---------------------------------------------------------------------
@@ -1539,8 +1541,6 @@ create table IF NOT EXISTS `tcluster_agent`(
     `id_cluster` int unsigned not null,
     `id_agent` int(10) unsigned not null,
 		PRIMARY KEY (`id_cluster`,`id_agent`),
-		FOREIGN KEY (`id_agent`) REFERENCES tagente(`id_agente`)
-			ON UPDATE CASCADE,
 		FOREIGN KEY (`id_cluster`) REFERENCES tcluster(`id`)
 			ON UPDATE CASCADE
 ) engine=InnoDB DEFAULT CHARSET=utf8;

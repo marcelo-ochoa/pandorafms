@@ -1674,26 +1674,27 @@ function modules_get_last_value ($id_agentmodule) {
  * @return mixed The row of tagente_datos of the last period. False if there were no data.
  */
 function modules_get_previous_data ($id_agent_module, $utimestamp = 0, $string = 0) {
-	if (empty ($utimestamp))
+	if (empty ($utimestamp)){
 		$utimestamp = time ();
-	
+	}
+
 	if ($string == 1) {
 		$table = 'tagente_datos_string';
 	}
 	else {
 		$table = 'tagente_datos';
 	}
-	
+
 	$sql = sprintf ('SELECT *
 		FROM ' . $table . '
 		WHERE id_agente_modulo = %d
-			AND utimestamp <= %d 
-			AND utimestamp >= %d 
+			AND utimestamp <= %d
 		ORDER BY utimestamp DESC',
-		$id_agent_module, $utimestamp, $utimestamp - SECONDS_2DAY);
-	
-	$search_in_history_db = db_search_in_history_db($utimestamp);
+		$id_agent_module, $utimestamp,
+		$utimestamp - SECONDS_2DAY
+	);
 
+	$search_in_history_db = db_search_in_history_db($utimestamp);
 	return db_get_row_sql ($sql, $search_in_history_db);
 }
 
@@ -2327,14 +2328,12 @@ function modules_get_first_date($id_agent_module, $datelimit = 0) {
 		$query  = " SELECT max(utimestamp) as utimestamp FROM $table ";
 		$query .= " WHERE id_agente_modulo=$id_agent_module ";
 		$query .= " AND utimestamp < $datelimit ";
-	
 	}
 	else {
 		// get first utimestamp
 		$query  = " SELECT min(utimestamp) as utimestamp FROM $table ";
 		$query .= " WHERE id_agente_modulo=$id_agent_module ";
 	}
-	
 
 	// SEARCH ACTIVE DB
 	$data = db_get_all_rows_sql($query,$search_historydb);
@@ -2684,4 +2683,62 @@ function recursive_get_dt_from_modules_tree (&$f_modules, $modules, $deep) {
 	}
 }
 
+/**
+ * @brief Get the button with the link to open realtime stats into a new window
+ *		Only to native (not satellite discovered) snmp modules.
+ *
+ * @param array With all the module info
+ * @return string All the HTML code to paint the button
+ */
+function get_module_realtime_link_graph ($module) {
+	global $config;
+
+	// Sometimes some parameters are renamed
+	if (!isset($module['id_tipo_modulo'])) $module['id_tipo_modulo'] = $module['module_type'];
+	if (!isset($module['nombre'])) $module['nombre'] = $module['module_name'];
+
+	// Avoid to show on metaconsole
+	if (is_metaconsole()) return '';
+	// Realtime graph is an extension and it should be enabled
+	if (!extensions_is_enabled_extension("realtime_graphs.php")) return '';
+	// Only to remote_snmp, remote_snmp_proc. snmp_snmp_inc
+	if ($module['id_tipo_modulo'] != 15 && $module['id_tipo_modulo'] != 16 && $module['id_tipo_modulo'] != 18) {
+		return '';
+	}
+	// Only version 1, 2 and 2c
+	if ($module['tcp_send'] != "1" && $module['tcp_send'] != "2" && $module['tcp_send'] != "2c") {
+		return '';
+	}
+
+	$params = array(
+		'graph' => 'snmp_module',
+		'agent_alias' => urlencode(modules_get_agentmodule_agent_alias($module['id_agente_modulo'])),
+		'module_name' => urlencode($module['nombre']),
+		'snmp_address' => $module['ip_target'],
+		'snmp_community' => $module['snmp_community'],
+		'snmp_oid' => $module['snmp_oid'],
+		'snmp_ver' => $module['tcp_send'],
+		'hide_header' => 1,
+		'rel_path' => '../../'
+	);
+	// Incremental type
+	if ($module['id_tipo_modulo'] == 16) $params['incremental'] = 1;
+	$link = "operation/agentes/realtime_win.php?";
+	foreach ($params as $p_key => $p_value) {
+		$link .= "$p_key=" . urlencode(io_safe_output($p_value)) . "&";
+	}
+	$link = substr($link, 0, -1);
+
+	$win_handle = "realtime_" . dechex(crc32($module["id_agente_modulo"].$module["nombre"]));
+
+	$link_button = '<a href="javascript:winopeng_var(\''.$link.'\',\''.$win_handle.'\', 850, 480)">' .
+		html_print_image(
+			"images/realtime_shortcut.png",
+			true,
+			array("border" => '0', "alt" => "", 'title' => __('Realtime SNMP graph'))
+		) .
+	'</a>';
+
+	return $link_button;
+}
 ?>

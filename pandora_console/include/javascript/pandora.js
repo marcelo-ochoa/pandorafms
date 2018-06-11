@@ -637,7 +637,6 @@ function post_process_select_init_unit(name,selected) {
 	$('#' + name + '_select').change(function() {
 		var value = $('#' + name + '_select').val();
 		$('#' + name + '_select option[value='+ value +']').attr("selected",true);
-		console.log(value);
 	});
 	
 }
@@ -1553,13 +1552,115 @@ function paint_graph_status(min_w, max_w, min_c, max_c, inverse_w, inverse_c, er
 	}
 }
 
-function round_with_decimals (value, multiplier = 1) {
+function round_with_decimals(value, multiplier) {
+	// Default values
+	if (typeof(multiplier) === "undefined") multiplier = 1;
+
 	// Return non numeric types without modification
 	if (typeof(value) !== "number") return value;
 
 	if ((value * multiplier) == 0) return 0;
-	if ((value * multiplier) >= 1) {
+	if ((Math.abs(value) * multiplier) >= 1) {
 		return Math.round(value * multiplier) / multiplier;
 	}
 	return round_with_decimals (value, multiplier * 10);
+}
+
+/**
+ * Display a confirm dialog box
+ *
+ * @param string Text to display
+ * @param string Ok button text
+ * @param string Cancel button text
+ * @param function Callback to action when ok button is pressed
+*/
+function display_confirm_dialog (message, ok_text, cancel_text, ok_function) {
+	// Clean function to close the dialog
+	var clean_function = function () {
+		$("#pandora_confirm_dialog_text").hide();
+		$("#pandora_confirm_dialog_text").remove();
+	}
+
+	// Modify the ok function to close the dialog too
+	var ok_function_clean = function () {
+		ok_function();
+		clean_function();
+	}
+
+	// Display the dialog
+	$("body").append('<div id="pandora_confirm_dialog_text"><h3>' + message + '</h3></div>');
+	$("#pandora_confirm_dialog_text").dialog({
+		resizable: false,
+		draggable: true,
+		modal: true,
+		dialogClass: "pandora_confirm_dialog",
+		overlay: {
+			opacity: 0.5,
+			background: "black"
+		},
+		closeOnEscape: true,
+		modal: true,
+		buttons: {
+			Cancel: clean_function,
+			"Confirm": ok_function_clean
+		}
+	});
+}
+
+function ellipsize (str, max, ellipse) {
+	if (max == null) max = 140;
+	if (ellipse == null) ellipse = "…";
+
+	return str.trim().length > max ? str.substr(0, max).trim() + ellipse : str;
+}
+
+/**
+ * Display a dialog with an image
+ *
+ * @param {string} icon_name The name of the icon you will display
+ * @param {string} icon_path The path to the icon
+ * @param {Object} incoming_options All options 
+ * 		grayed: {bool} True to display the background black
+ * 		title {string} 'Logo preview' by default
+ */
+function logo_preview (icon_name, icon_path, incoming_options) {
+	// Get the options
+	options = {
+		grayed: false,
+		title: "Logo preview"
+	}
+	$.extend(options, incoming_options);
+
+	if (icon_name == "") return;
+
+	$dialog = $("<div></div>");
+	$image = $("<img src=\"" + icon_path + "\">");
+	$image.css('max-width', '500px').css('max-height', '500px');
+
+	try {
+		$dialog
+			.hide()
+			.html($image)
+			.dialog({
+				title: options.title,
+				resizable: true,
+				draggable: true,
+				modal: true,
+				dialogClass: options.grayed ? 'dialog-grayed' : '',
+				overlay: {
+					opacity: 0.5,
+					background: "black"
+				},
+				minHeight: 1,
+				width: $image.width,
+				close: function () {
+					$dialog
+						.empty()
+						.remove();
+				}
+			}).show();
+	}
+	catch (err) {
+		// console.log(err);
+	}
 }
