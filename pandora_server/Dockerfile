@@ -1,25 +1,18 @@
+FROM centos:centos6 AS develop
+LABEL maintainer="Pandora FMS Team <info@pandorafms.com>"
+
+#Clone the repo and perform initial install
+RUN yum install -y git && \
+	mkdir -p /tmp/pandorafms && cd /tmp/pandorafms && git init && \
+	git remote add origin https://github.com/pandorafms/pandorafms.git && git config core.sparsecheckout true && \
+	echo "pandora_console/" >> .git/info/sparse-checkout && echo "pandora_server/" >> .git/info/sparse-checkout && \
+	git pull --depth=1 origin develop
+
 FROM centos:centos6
 LABEL maintainer="Pandora FMS Team <info@pandorafms.com>"
 
-RUN { \
-	echo '[EPEL]'; \
-	echo 'name = CentOS Epel'; \
-	echo 'baseurl = http://dl.fedoraproject.org/pub/epel/6/x86_64'; \
-	echo 'enabled=1'; \
-	echo 'gpgcheck=0'; \
-} > /etc/yum.repos.d/extra_repos.repo
-
-RUN { \
-        echo '[artica_pandorafms]'; \
-        echo 'name=CentOS6 - PandoraFMS official repo'; \
-        echo 'baseurl=http://artica.es/centos6'; \
-        echo 'gpgcheck=0'; \
-        echo 'enabled=1'; \
-} > /etc/yum.repos.d/pandorafms.repo
-
-RUN yum -y update && yum clean all && \
-	yum install -y \ 
-	git \
+RUN yum -y update && \
+	yum install -y \
 	cronie \
 	ntp \
 	wget \
@@ -49,14 +42,14 @@ RUN yum -y update && yum clean all && \
 	perl-XML-Twig \ 
 	perl-Encode-Locale \
 	net-snmp \
-	net-snmp-utils
+	net-snmp-utils && \
+    yum clean all 
 	
+COPY --from=develop /tmp/pandorafms/pandora_server /tmp/pandorafms/pandora_server
 
-#Clone the repo
-RUN git clone -b develop https://github.com/pandorafms/pandorafms.git /tmp/pandorafms && \
-	/usr/sbin/useradd -d /home/pandora -s /bin/false -M -g 0 pandora && \
-	cd /tmp/pandorafms/pandora_server && ./pandora_server_installer --install && \
-	rm -rf /tmp/pandorafms
+# Install
+RUN /usr/sbin/useradd -d /home/pandora -s /bin/false -M -g 0 pandora && \
+    cd /tmp/pandorafms/pandora_server && ./pandora_server_installer --install
 
 #Exposing ports for: Tentacle protocol
 EXPOSE 41121
@@ -65,7 +58,8 @@ EXPOSE 41121
 ADD docker_entrypoint.sh /entrypoint.sh
 ADD generate_conf_from_env.sh /generate_conf_from_env.sh
 ADD run_cron.sh /run_cron.sh
-RUN chmod -v +x /entrypoint.sh
+RUN rm -rf /tmp/pandorafms && rm -rf /tmp/* && rm -rf /var/tmp/* && \
+    chmod -v +x /entrypoint.sh
 
 CMD ["/entrypoint.sh"]
 
