@@ -129,9 +129,10 @@ function config_update_config () {
 						$error_update[] = __('Language settings');
 					if (!config_update_value ('remote_config', (string) get_parameter ('remote_config')))
 						$error_update[] = __('Remote config directory');
+					if (!config_update_value ('phantomjs_bin', (string) get_parameter ('phantomjs_bin')))
+						$error_update[] = __('phantomjs config directory');
 					if (!config_update_value ('loginhash_pwd', io_input_password((string) get_parameter ('loginhash_pwd'))))
 						$error_update[] = __('Auto login (hash) password');
-					
 					if (!config_update_value ('timesource', (string) get_parameter ('timesource')))
 						$error_update[] = __('Time source');
 					if (!config_update_value ('autoupdate', (bool) get_parameter ('autoupdate')))
@@ -455,11 +456,11 @@ function config_update_config () {
 					if (!config_update_value ('prominent_time', (string) get_parameter ('prominent_time')))
 						$error_update[] = __('Timestamp or time comparation');
 					if (!config_update_value ('graph_color1', (string) get_parameter ('graph_color1')))
-						$error_update[] = __('Graph color (min)');
+						$error_update[] = __('Graph color #1');
 					if (!config_update_value ('graph_color2', (string) get_parameter ('graph_color2')))
-						$error_update[] = __('Graph color (avg)');
+						$error_update[] = __('Graph color #2');
 					if (!config_update_value ('graph_color3', (string) get_parameter ('graph_color3')))
-						$error_update[] = __('Graph color (max)');
+						$error_update[] = __('Graph color #3');
 					if (!config_update_value ('graph_color4', (string) get_parameter ('graph_color4')))
 						$error_update[] = __('Graph color #4');
 					if (!config_update_value ('graph_color5', (string) get_parameter ('graph_color5')))
@@ -474,8 +475,6 @@ function config_update_config () {
 						$error_update[] = __('Graph color #9');
 					if (!config_update_value ('graph_color10', (string) get_parameter ('graph_color10')))
 						$error_update[] = __('Graph color #10');
-					if (!config_update_value ('graph_res', (int) get_parameter ('graph_res')))
-						$error_update[] = __('Graphic resolution (1-low, 5-high)');
 					if (!config_update_value ('interface_unit', (string) get_parameter ('interface_unit', __('Bytes') )))
 						$error_update[] = __('Value to interface graphics');
 					if (!config_update_value ('graph_precision', (string) get_parameter ('graph_precision', 1)))
@@ -497,9 +496,7 @@ function config_update_config () {
 						$error_update[] = __('Font path');
 					if (!config_update_value ('font_size', get_parameter('font_size')))
 						$error_update[] = __('Font size');
-					if (!config_update_value ('flash_charts', (bool) get_parameter ('flash_charts')))
-						$error_update[] = __('Interactive charts');
-					
+
 					if (!config_update_value ('custom_favicon', (string) get_parameter ('custom_favicon')))
 						$error_update[] = __('Custom favicon');
 					if (!config_update_value ('custom_logo', (string) get_parameter ('custom_logo')))
@@ -609,8 +606,6 @@ function config_update_config () {
 						$error_update[] = __('Default type of module charts.');
 					if (!config_update_value ('type_interface_charts', (string) get_parameter('type_interface_charts', 'line')))
 						$error_update[] = __('Default type of interface charts.');
-					if (!config_update_value ('only_average', (bool) get_parameter('only_average', false)))
-						$error_update[] = __('Default show only average or min and max');
 					if (!config_update_value ('render_proc', (bool) get_parameter('render_proc', false)))
 						$error_update[] = __('Display data of proc modules in other format');
 					if (!config_update_value ('render_proc_ok', (string) get_parameter('render_proc_ok', __('Ok') )))
@@ -804,12 +799,9 @@ function config_update_config () {
 				if (!config_update_value('ehorus_custom_field', (string) get_parameter('ehorus_custom_field', $config['ehorus_custom_field'])))
 					$error_update[] = __('eHorus id custom field');
 				break;
-			
 		}
-		
-		
 	}
-	
+
 	if (count($error_update) > 0) {
 		$config['error_config_update_config'] = array();
 		$config['error_config_update_config']['correct'] = false;
@@ -820,7 +812,7 @@ function config_update_config () {
 		$config['error_config_update_config'] = array();
 		$config['error_config_update_config']['correct'] = true;
 	}
-	
+
 	enterprise_include_once('include/functions_policies.php');
 	$enterprise = enterprise_include_once ('include/functions_skins.php');
 	if ($enterprise !== ENTERPRISE_NOT_HOOK) {
@@ -869,7 +861,17 @@ function config_process_config () {
 	
 		config_update_value ('remote_config', $default);
 	}
-	
+
+	if (!isset ($config['phantomjs_bin'])) {
+		if ($is_windows){
+			$default = 'C:\\PandoraFMS\\Pandora_Server\\data_in';
+		}
+		else{
+			$default = '/usr/bin';
+		}
+		config_update_value ('phantomjs_bin', $default);
+	}
+
 	if (!isset ($config['date_format'])) {
 		config_update_value ('date_format', 'F j, Y, g:i a');
 	}
@@ -1167,11 +1169,7 @@ function config_process_config () {
 	if (!isset ($config['style'])) {
 		config_update_value ( 'style', 'pandora');
 	}
-	
-	if (!isset ($config['flash_charts'])) {
-		config_update_value ( 'flash_charts', true);
-	}
-	
+
 	if (!isset ($config["login_background"])) {
 		config_update_value ('login_background', '');
 	}
@@ -2178,21 +2176,28 @@ function config_check () {
 			sprintf(__('Recommended value is: %s'), sprintf(__('%s or greater'), '800M')) . '<br><br>' . __('Please, change it on your PHP configuration file (php.ini) or contact with administrator (Dont forget restart apache process after changes)'),
 			sprintf(__("Not recommended '%s' value in PHP configuration"), 'upload_max_filesize'));
 	}
-	
+
 	$PHPmemory_limit_min = config_return_in_bytes('500M');
-	
+
 	if ($PHPmemory_limit < $PHPmemory_limit_min && $PHPmemory_limit !== '-1') {
 		set_pandora_error_for_header(
 			sprintf(__('Recommended value is: %s'), sprintf(__('%s or greater'), '500M')) . '<br><br>' . __('Please, change it on your PHP configuration file (php.ini) or contact with administrator'),
 			sprintf(__("Not recommended '%s' value in PHP configuration"), 'memory_limit'));
 	}
-	
+
 	if (preg_match("/system/", $PHPdisable_functions) or preg_match("/exec/", $PHPdisable_functions)) {
-		set_pandora_error_for_header( 
+		set_pandora_error_for_header(
 			__("Variable disable_functions containts functions system() or exec(), in PHP configuration file (php.ini)"). '<br /><br />' . 
 			__('Please, change it on your PHP configuration file (php.ini) or contact with administrator (Dont forget restart apache process after changes)'), __("Problems with disable functions in PHP.INI"));
 	}
-	
+
+	$result_ejecution = exec($config['phantomjs_bin'] . '/phantomjs --version');
+	if(!isset($result_ejecution) || $result_ejecution == ''){
+		set_pandora_error_for_header(
+			__('To be able to create images of the graphs for PDFs, please install the phantom.js extension. For that, it is necessary to follow these steps:') .
+			'<a src="">Click here</a>',
+			__("phantomjs is not installed"));
+	}
 }
 
 function config_return_in_bytes($val) {
@@ -2225,10 +2230,7 @@ function config_user_set_custom_config() {
 	// If block_size or flash_chart are provided then override global settings
 	if (!empty($userinfo["block_size"]) && ($userinfo["block_size"] != 0))
 		$config["block_size"] = $userinfo["block_size"];
-	
-	if ($userinfo["flash_chart"] != -1)
-		$config["flash_charts"] = $userinfo["flash_chart"];
-	
+
 	// Each user could have it's own timezone)
 	if (isset($userinfo["timezone"])) {
 		if ($userinfo["timezone"] != "") {

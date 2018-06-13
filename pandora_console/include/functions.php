@@ -313,7 +313,7 @@ function human_time_comparation ($timestamp, $units = 'large') {
 	global $config;
 	
 	if (!is_numeric ($timestamp)) {
-		$timestamp = strtotime ($timestamp);
+		$timestamp = time_w_fixed_tz($timestamp);
 	}
 	
 	$seconds = get_system_time () - $timestamp;
@@ -2371,7 +2371,11 @@ function print_audit_csv ($data) {
 		__('Source IP') . ';' .
 		__('Comments') ."\n";
 	foreach ($data as $line) {
-		echo io_safe_output($line['id_usuario']) . ';' .  io_safe_output($line['accion']) . ';' .  $line['fecha'] . ';' .  $line['ip_origen'] . ';'.  io_safe_output($line['descripcion']). "\n";
+		echo io_safe_output($line['id_usuario']) . ';'
+		. io_safe_output($line['accion']) . ';'
+		. date($config["date_format"], $line['utimestamp']) . ';'
+		. $line['ip_origen'] . ';'
+		. io_safe_output($line['descripcion']). "\n";
 	}
 
 	exit;
@@ -2824,6 +2828,62 @@ function validate_address($address){
 	return true;
 }
 
+/**
+ * Used to get the offset in seconds to the UTC date.
+ *
+ * @param string Timezone identifier.
+ */
+function get_utc_offset ($timezone) {
+	if (empty($timezone)) return 0;
+
+	$dtz = new DateTimeZone($timezone);
+	$dt = new DateTime("now", $dtz);
+
+	return $dtz->getOffset($dt);
+}
+
+function get_system_utc_offset () {
+	global $config;
+	return get_utc_offset($config["timezone"]);
+}
+
+function get_current_utc_offset () {
+	return get_utc_offset(date_default_timezone_get());
+}
+
+function get_fixed_offset () {
+	return get_current_utc_offset() - get_system_utc_offset();
+}
+
+/**
+ * Used to transform the dates without timezone information (like '2018/05/23 10:10:10')
+ * to a unix timestamp compatible with the user custom timezone.
+ *
+ * @param string Date without timezone information.
+ * @param number Offset between the date timezone and the user's default timezone.
+ */
+function time_w_fixed_tz ($date, $timezone_offset = null) {
+	if ($timezone_offset === null) $timezone_offset = get_fixed_offset();
+
+	return strtotime($date) + $timezone_offset;
+}
+
+/**
+ * Used to transform the dates without timezone information (like '2018/05/23 10:10:10')
+ * to a date compatible with the user custom timezone.
+ *
+ * @param string Date without timezone information.
+ * @param string Date format.
+ * @param number Offset between the date timezone and the user's default timezone.
+ */
+function date_w_fixed_tz ($date, $format = null, $timezone_offset = null) {
+	global $config;
+
+	if ($format === null) $format = $config["date_format"];
+
+	return date($format, time_w_fixed_tz($date, $timezone_offset));
+}
+
 function color_graph_array(){
 	global $config;
 
@@ -2835,76 +2895,73 @@ function color_graph_array(){
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 
-	//XXX Hablar con Sancho del tema de los slices
-	/*
-		$color_series[1] = array(
-			'border' => '#000000',
-			'color' => $config['graph_color2'],
-			'alpha' => CHART_DEFAULT_ALPHA
-		);
-		$color_series[2] = array(
-			'border' => '#000000',
-			'color' => $config['graph_color3'],
-			'alpha' => CHART_DEFAULT_ALPHA
-		);
-	*/
-
 	$color_series[1] = array(
 		'border' => '#000000',
-		'color' => $config['graph_color4'],
+		'color' => $config['graph_color2'],
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[2] = array(
 		'border' => '#000000',
-		'color' => $config['graph_color5'],
+		'color' => $config['graph_color3'],
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
+
 	$color_series[3] = array(
 		'border' => '#000000',
-		'color' => $config['graph_color6'],
+		'color' => $config['graph_color4'],
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[4] = array(
 		'border' => '#000000',
-		'color' => $config['graph_color7'],
+		'color' => $config['graph_color5'],
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[5] = array(
 		'border' => '#000000',
-		'color' => $config['graph_color8'],
+		'color' => $config['graph_color6'],
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[6] = array(
 		'border' => '#000000',
-		'color' => $config['graph_color9'],
+		'color' => $config['graph_color7'],
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[7] = array(
 		'border' => '#000000',
-		'color' => $config['graph_color10'],
+		'color' => $config['graph_color8'],
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[8] = array(
 		'border' => '#000000',
-		'color' => COL_GRAPH9,
+		'color' => $config['graph_color9'],
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[9] = array(
 		'border' => '#000000',
-		'color' => COL_GRAPH10,
+		'color' => $config['graph_color10'],
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[10] = array(
 		'border' => '#000000',
-		'color' => COL_GRAPH11,
+		'color' => COL_GRAPH9,
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[11] = array(
 		'border' => '#000000',
-		'color' => COL_GRAPH12,
+		'color' => COL_GRAPH10,
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 	$color_series[12] = array(
+		'border' => '#000000',
+		'color' => COL_GRAPH11,
+		'alpha' => CHART_DEFAULT_ALPHA
+	);
+	$color_series[13] = array(
+		'border' => '#000000',
+		'color' => COL_GRAPH12,
+		'alpha' => CHART_DEFAULT_ALPHA
+	);
+	$color_series[14] = array(
 		'border' => '#000000',
 		'color' => COL_GRAPH13,
 		'alpha' => CHART_DEFAULT_ALPHA
@@ -2970,17 +3027,6 @@ function color_graph_array(){
 		'color' => '#0097BC',
 		'alpha' => 10
 	);
-	//XXXXXXXX
-	/*
-		if($id_widget_dashboard){
-			$opcion = unserialize(db_get_value_filter('options','twidget_dashboard',array('id' => $id_widget_dashboard)));
-			foreach ($module_list as $key => $value) {
-				if(!empty($opcion[$value])){
-					$color[$key]['color'] = $opcion[$value];
-				}
-			}
-		}
-	*/
 
 	return $color_series;
 }
@@ -3004,6 +3050,18 @@ function series_type_graph_array($data, $show_elements_graph){
 	}
 
 	$color_series = color_graph_array();
+
+	if($show_elements_graph['id_widget_dashboard']){
+		$opcion = unserialize(db_get_value_filter('options','twidget_dashboard',array('id' => $show_elements_graph['id_widget_dashboard'])));
+		foreach ($opcion as $key => $value) {
+			$color_series[0] = array(
+				'border' => '#000000',
+				'color' => $opcion['avg'],
+				'alpha' => CHART_DEFAULT_ALPHA
+			);
+		}
+	}
+
 	$i = 0;
 	if(isset($data) && is_array($data)){
 		foreach ($data as $key => $value) {
@@ -3168,7 +3226,7 @@ function generator_chart_to_pdf($type_graph_pdf, $params, $params_combined = fal
 	$session_id = session_id();
 
 	$result = exec(
-		"phantomjs " . $file_js . " " .
+		$config['phantomjs_bin'] ."/phantomjs " . $file_js . " " .
 		$url . "  '" .
 		$type_graph_pdf . "' '" .
 		$params_encode_json . "' '" .
@@ -3217,4 +3275,5 @@ function get_copyright_notice () {
 	}
 	return $stored_name;
 }
+
 ?>

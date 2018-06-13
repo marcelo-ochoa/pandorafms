@@ -369,6 +369,7 @@ function pandoraFlotHBars(graph_id, values, labels, water_mark,
 				hoverable: true,
 				borderWidth: 1,
 				tickColor: tick_color,
+				borderColor: '#C1C1C1',
 				backgroundColor: { colors: [background_color, background_color] }
 				},
 			xaxis: {
@@ -532,15 +533,15 @@ function pandoraFlotVBars(graph_id, values, labels, labels_long, legend, colors,
 	font = font.split("/").pop().split(".").shift();
 	labels_long = labels_long.length > 0 ? labels_long.split(separator) : 0;
 	colors = colors.length > 0 ? colors.split(separator) : [];
-	
+
 	var colors_data = colors.length > 0
 		? colors
 		: ['#FFA631','#FC4444','#FAD403','#5BB6E5','#F2919D','#80BA27'];
 	var datas = new Array();
-	
+
 	for (i = 0; i < values.length; i++) {
 		var serie = values[i].split(separator);
-		
+
 		var aux = new Array();
 		for (j = 0; j < serie.length; j++) {
 			var aux2 = parseFloat(serie[j]);
@@ -559,16 +560,16 @@ function pandoraFlotVBars(graph_id, values, labels, labels_long, legend, colors,
 			}
 		};
 	}
-	
+
 	var labels_total=new Array();
 	labels = labels.split(separator);
 	i = 0;
 	for (i = 0; i < labels.length; i++) {
 		labels_total.push([i, labels[i]]);
 	}
-	
+
 	var stack = 0, bars = true, lines = false, steps = false;
-	
+
 	var options = {
 		series: {
 			bars: {
@@ -605,7 +606,7 @@ function pandoraFlotVBars(graph_id, values, labels, labels_long, legend, colors,
 					text = text.substring(0,3) + "K";
 				else if (label >= 1000)
 					text = text.substring(0,2) + "K";
-				
+
 				return '<div style="font-size:'+font_size+'pt !important;">'+text+'</div>';
 			}
 		},
@@ -620,17 +621,18 @@ function pandoraFlotVBars(graph_id, values, labels, labels_long, legend, colors,
 			hoverable: true,
 			borderWidth: 1,
 			tickColor: tick_color,
+			borderColor: '#C1C1C1',
 			backgroundColor: { colors: [background_color, background_color] }
 		}
 	};
-	
+
 	if(from_wux){
 		options.series.bars.barWidth = 0.5;
 		options.grid.aboveData = true;
 		options.grid.borderWidth = 0;
 		options.grid.markings = [ { xaxis: { from: -0.25, to: -0.25 }, color: "#000" },
 										{ yaxis: { from: 0, to: 0 }, color: "#000" }];
-		options.grid.markingsLineWidth = 0.3; 		
+		options.grid.markingsLineWidth = 0.3;
 
 		options.xaxis.tickLength = 0;
 		options.yaxis.tickLength = 0;
@@ -638,12 +640,12 @@ function pandoraFlotVBars(graph_id, values, labels, labels_long, legend, colors,
 
 	if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
 		options.xaxis.labelWidth = 100;
-	
+
 	var plot = $.plot($('#'+graph_id),datas, options );
 	$('#' + graph_id).VUseTooltip();
 	$('#' + graph_id).css("margin-left","auto");
 	$('#' + graph_id).css("margin-right","auto");
-	
+
 	if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
 		$('#'+graph_id+' .xAxis .tickLabel')
 			.find('div')
@@ -662,7 +664,7 @@ function pandoraFlotVBars(graph_id, values, labels, labels_long, legend, colors,
 				title = label;
 				label = shortLabel;
 			}
-			
+
 			format.push([i,
 				'<div class="'+font+'" title="'+title+'" style="word-break: normal; overflow:hidden; transform: rotate(-45deg); position:relative; top:+30px; left:0px; max-width: 100px;font-size:'+font_size+'pt !important;">'
 				+ label
@@ -678,7 +680,7 @@ function pandoraFlotVBars(graph_id, values, labels, labels_long, legend, colors,
 	function lFormatter(v, axis) {
 		return '<div style="font-size:'+font_size+'pt !important;">'+v+'</div>';
 	}
-	
+
 	if (water_mark) {
 		set_watermark(graph_id, plot, $('#watermark_image_'+graph_id).attr('src'));
 	}
@@ -855,29 +857,33 @@ function pandoraFlotSlicebar(graph_id, values, datacolor, labels, legend, acumul
 	}
 }
 
-function pandoraFlotArea(
-	graph_id, values, legend, agent_module_id,
+function pandoraFlotArea( graph_id, values, legend,
 	series_type, color, water_mark, date_array,
-	data_module_graph, params,
-	force_integer, background_color,
-	legend_color, short_data, events_array
+	data_module_graph, params, events_array
 ) {
 
 	//diferents vars
-	var unit           = params.unit ? params.unit : '';
-	var homeurl        = params.homeurl;
-	var font_size      = params.font_size;
-	var font           = params.font;
-	var width          = params.width;
-	var height         = params.height;
-	var vconsole       = params.vconsole;
-	var dashboard      = params.dashboard;
-	var menu           = params.menu;
-	var min_x          = date_array['start_date'] *1000;
-	var max_x          = date_array['final_date'] *1000;
-	var type           = params.stacked;
-	var show_legend    = params.show_legend;
-	var image_treshold = params.image_treshold;
+	var unit             = params.unit ? params.unit : '';
+	var homeurl          = params.homeurl;
+	var font_size        = params.font_size;
+	var font             = params.font;
+	var width            = params.width;
+	var height           = params.height;
+	var vconsole         = params.vconsole;
+	var dashboard        = params.dashboard;
+	var menu             = params.menu;
+	var min_x            = date_array['start_date'] *1000;
+	var max_x            = date_array['final_date'] *1000;
+	var type             = params.stacked;
+	var show_legend      = params.show_legend;
+	var image_treshold   = params.image_treshold;
+	var short_data       = params.short_data;
+	var grid_color       = params.grid_color;
+	var background_color = params.backgroundColor;
+	var legend_color     = params.legend_color;
+
+	//XXXXXX colocar
+	var force_integer    = 0;
 
 	if(typeof type === 'undefined' || type == ''){
 		type = params.type_graph;
@@ -895,9 +901,6 @@ function pandoraFlotArea(
 
 	//XXXXX
 	var markins_graph    = true;
-
-	var legend_events = null;
-	var legend_alerts = null;
 
 	// If threshold and up are the same, that critical or warning is disabled
 	if (yellow_threshold == yellow_up){
@@ -917,10 +920,6 @@ function pandoraFlotArea(
 	var red_only_min    = ((red_up == 0) && (red_threshold != 0));
 
 	//color
-	var normalw   = '#efe';
-	var warningw  = '#ffe';
-	var criticalw = '#fee';
-	var normal    = '#0f0';
 	var warning   = 'yellow';
 	var critical  = 'red';
 
@@ -1594,7 +1593,7 @@ function pandoraFlotArea(
 	}
 
 	var maxticks = date_array['period'] / 3600 / number_ticks;
-
+console.log(grid_color);
 	var options = {
 			series: {
 				stack: stacked,
@@ -1618,13 +1617,13 @@ function pandoraFlotArea(
 				clickable: true,
 				borderWidth:1,
 				borderColor: '#C1C1C1',
-				tickColor: background_color,
-				color: legend_color,
+				backgroundColor: background_color,
+				color: grid_color,
 				autoHighlight: true
 			},
 			xaxis: {
-				min: date_array.start_date * 1000,
-				max: date_array.final_date * 1000
+				min: min_x,
+				max: max_x
 			},
 			xaxes: [{
 				axisLabelUseCanvas: true,
@@ -1677,7 +1676,7 @@ function pandoraFlotArea(
 		}
 	}
 
-/*//XXXXXXX
+/*//XXXXXXXREvisar esto
 if (vconsole) {
 		var myCanvas = plot.getCanvas();
 		plot.setupGrid(); // redraw plot to new size
@@ -1696,7 +1695,6 @@ if (vconsole) {
 	});
 
 	// Adjust linked graph to the width and position of the main plot
-
 	// Miniplot
 	if (!vconsole) {
 		var overview = $.plot($('#overview_'+graph_id),datas, {
@@ -1722,7 +1720,7 @@ if (vconsole) {
 				borderWidth:1,
 				borderColor: '#C1C1C1',
 				tickColor: background_color,
-				color: legend_color,
+				color: grid_color,
 				autoHighlight: true
 			},
 			xaxis: {
@@ -1756,6 +1754,8 @@ if (vconsole) {
 			}
 		});
 	}
+
+	$('#legend_' + graph_id + ' .legendLabel').css('color', legend_color);
 
 	// Adjust overview when main chart is resized
 	$('#overview_'+graph_id).resize(function(){
@@ -1994,10 +1994,10 @@ if (vconsole) {
 				.eq(i).css('font-size',font_size+'pt');
 
 			$('#legend_' + graph_id + ' .legendLabel')
-				.eq(i).css('color','');
+				.eq(i).css('color', legend_color);
 
 			$('#legend_' + graph_id + ' .legendLabel')
-				.eq(i).css('font-family',font+'Font');
+				.eq(i).css('font-family',font);
 
 			i++;
 		}

@@ -234,27 +234,23 @@ function grafico_modulo_sparse_data_chart (
 
 	global $config;
 
+	//XXXXX
+	//Para evitar mostrar todos los datos a la vez lo cual puede recargar se hace un sistema de cajas que parte de una constante = 250
+	//y el periodo de tiempo seleccionado ademas de poder ir reducciendo el nivel de cajas es decir aumentando el nivel de detalle de la grafica
+	//hasta la opcion full que mostraria todos los puntos(datos) que contiene ese periodo.
+	$data_slice	= $date_array['period'] / (250 * $params['zoom']);
+
 	if( $data_module_graph['id_module_type'] == 23 ||
 		$data_module_graph['id_module_type'] == 3 ||
 		$data_module_graph['id_module_type'] == 17 ||
 		$data_module_graph['id_module_type'] == 10 ||
 		$data_module_graph['id_module_type'] == 33 ){
-
-//XXXXXXXXXXX SLICES
-/*
-"SELECT count(*) as data, min(utimestamp) as utimestamp
-					FROM tagente_datos_string
-					WHERE id_agente_modulo = 227
-					AND utimestamp > 1527584831
-					AND utimestamp < 1527671231
-					GROUP by ROUND(utimestamp / 300);"
-*/
 		$data = db_get_all_rows_filter (
 			'tagente_datos_string',
 			array ('id_agente_modulo' => (int)$agent_module_id,
 					"utimestamp > '". $date_array['start_date']. "'",
 					"utimestamp < '". $date_array['final_date'] . "'",
-					'group' => "ROUND(utimestamp / 300)",
+					'group' => "ROUND(utimestamp / $data_slice)",
 					'order' => 'utimestamp ASC'),
 			array ('count(*) as datos', 'min(utimestamp) as utimestamp'),
 			'AND',
@@ -262,22 +258,8 @@ function grafico_modulo_sparse_data_chart (
 		);
 	}
 	else{
-		/*
-		if(true){
-			$data = db_get_all_rows_filter (
-				'tagente_datos',
-				array ('id_agente_modulo' => (int)$agent_module_id,
-						"utimestamp > '". $date_array['start_date']. "'",
-						"utimestamp < '". $date_array['final_date'] . "'",
-						'group' => "ROUND(utimestamp / 86400)",
-						'order' => 'utimestamp ASC'),
-				array ('max(datos) as datos', 'min(utimestamp) as utimestamp'),
-				'AND',
-				$data_module_graph['history_db']
-			);
-		}
-		else{
-			*/
+		//all points(data)
+		if($params['zoom'] == 5){
 			$data = db_get_all_rows_filter (
 				'tagente_datos',
 				array ('id_agente_modulo' => (int)$agent_module_id,
@@ -288,7 +270,20 @@ function grafico_modulo_sparse_data_chart (
 				'AND',
 				$data_module_graph['history_db']
 			);
-		//}
+		}
+		else{
+			$data = db_get_all_rows_filter (
+				'tagente_datos',
+				array ('id_agente_modulo' => (int)$agent_module_id,
+						"utimestamp > '". $date_array['start_date']. "'",
+						"utimestamp < '". $date_array['final_date'] . "'",
+						'group' => "ROUND(utimestamp / $data_slice)",
+						'order' => 'utimestamp ASC'),
+				array ('sum(datos)/count(datos) as datos', 'min(utimestamp) as utimestamp'),
+				'AND',
+				$data_module_graph['history_db']
+			);
+		}
 	}
 
 	if($data === false){
@@ -870,8 +865,16 @@ function grafico_modulo_sparse ($params) {
 		$params['graph_combined'] = false;
 	}
 
+	if(!isset($params['zoom'])){
+		$params['zoom'] = 1;
+	}
+
+	//XXXX Configurable
+	$params['grid_color']   = '#C1C1C1';
+	$params['legend_color'] = '#636363';
 	$params['font']       = $config['fontpath'];
 	$params['font-size']  = $config['font_size'];
+	$params['short_data'] = $config['short_module_graph_data'];
 
 	if($params['only_image']){
 		return generator_chart_to_pdf('sparse', $params);
@@ -1228,7 +1231,6 @@ function graphic_combined_module (
 		$params_combined['percentil'] = $params['percentil'];
 	}
 
-
 	if(!isset($params['period'])){
 		return false;
 	}
@@ -1336,6 +1338,18 @@ function graphic_combined_module (
 	if($params['only_image']){
 		return generator_chart_to_pdf('combined', $params, $params_combined, $module_list);
 	}
+
+	if(!isset($params['zoom'])){
+		$params['zoom'] = 1;
+	}
+
+	//XXXXXXXX
+	//XXXX Configurable
+	$params['grid_color']   = '#C1C1C1';
+	$params['legend_color'] = '#636363';
+	$params['font']         = $config['fontpath'];
+	$params['font-size']    = $config['font_size'];
+	$params['short_data']   = $config['short_module_graph_data'];
 
 	global $config;
 	global $graphic_type;
@@ -1958,7 +1972,7 @@ function graphic_combined_module (
 					$ttl,
 					$homeurl,
 					$background_color,
-					'black'
+					'#c1c1c1'
 				);
 			}
 
@@ -1983,99 +1997,10 @@ function graphic_combined_module (
 					$background_color,
 					true,
 					false,
-					"black"
+					"#c1c1c1"
 				);
 			}
 
-			break;
-		case CUSTOM_GRAPH_THERMOMETER:
-			$datelimit = $params['date'] - $params['period'];
-			$i = 0;
-			foreach ($module_list as $module_item) {
-				$automatic_custom_graph_meta = false;
-				if ($config['metaconsole']) {
-					// Automatic custom graph from the report template in metaconsole
-					if (is_array($module_list[$i])) {
-						$server = metaconsole_get_connection_by_id ($module_item['server']);
-						metaconsole_connect($server);
-						$automatic_custom_graph_meta = true;
-					}
-				}
-
-				if ($automatic_custom_graph_meta)
-					$module = $module_item['module'];
-				else
-					$module = $module_item;
-
-				$temp[$module] = modules_get_agentmodule($module);
-				$query_last_value = sprintf('
-					SELECT datos
-					FROM tagente_datos
-					WHERE id_agente_modulo = %d
-						AND utimestamp < %d
-						ORDER BY utimestamp DESC',
-					$module, $params['date']);
-				$temp_data = db_get_value_sql($query_last_value);
-				if ( $temp_data ) {
-					if (is_numeric($temp_data))
-						$value = $temp_data;
-					else
-						$value = count($value);
-				}
-				else {
-					$value = false;
-				}
-				$temp[$module]['label'] = ($labels[$module] != '') ? $labels[$module] : $temp[$module]['nombre'];
-				$temp[$module]['value'] = $value;
-				$temp[$module]['label'] = ui_print_truncate_text($temp[$module]['label'],"module_small",false,true,false,"..");
-
-				if ($temp[$module]['unit'] == '%') {
-					$temp[$module]['min'] =	0;
-					$temp[$module]['max'] = 100;
-				}
-				else {
-					$min = $temp[$module]['min'];
-					if ($temp[$module]['max'] == 0)
-						$max = reporting_get_agentmodule_data_max($module,$params['period'],$params['date']);
-					else
-						$max = $temp[$module]['max'];
-					$temp[$module]['min'] = ($min == 0 ) ? 0 : $min;
-					$temp[$module]['max'] = ($max == 0 ) ? 100 : $max;
-				}
-				$temp[$module]['gauge'] = uniqid('gauge_');
-
-				if ($config['metaconsole']) {
-					// Automatic custom graph from the report template in metaconsole
-					if (is_array($module_list[0])) {
-						metaconsole_restore_db();
-					}
-				}
-				$i++;
-
-				$color = color_graph_array();
-
-				$graph_values = $temp;
-
-				return stacked_thermometers(
-					$flash_charts,
-					$graph_values,
-					$width,
-					$height,
-					$color,
-					$module_name_list,
-					$long_index,
-					ui_get_full_url("images/image_problem_area_small.png", false, false, false),
-					"",
-					"",
-					$water_mark,
-					$config['fontpath'],
-					$fixed_font_size,
-					"",
-					$ttl,
-					$homeurl,
-					$background_color
-				);
-			}
 			break;
 		case CUSTOM_GRAPH_PIE:
 			$total_modules = 0;
@@ -2267,24 +2192,6 @@ function combined_graph_summatory_average ($array_data, $average = false, $summa
 	}
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /**
  * Print a graph with access data of agents
  *
@@ -2308,7 +2215,7 @@ function graphic_agentaccess ($id_agent, $width, $height, $period = 0, $return =
 		WHERE id_agent = $id_agent
 		AND utimestamp > $datelimit
 		AND utimestamp < $date
-		GROUP by ROUND(utimestamp / 300)"
+		GROUP by ROUND(utimestamp / 1800)"
 	);
 
 	if(isset($data) && is_array($data)){
@@ -2342,14 +2249,16 @@ function graphic_agentaccess ($id_agent, $width, $height, $period = 0, $return =
 		'only_image'          => $only_image,
 		'homeurl'             => $homeurl,
 		'menu'                => true,
-		'backgroundColor'     => 'white',
+		'backgroundColor'     => '#f9faf9',
 		'type_graph'          => 'area',
 		'font'                => $config['fontpath'],
 		'font-size'           => $config['font_size'],
 		'array_data_create'   => $data_array,
 		'show_overview'       => false,
 		'show_export_csv'     => false,
-		'vconsole'            => $tree
+		'vconsole'            => true,
+		'show_legend'         => false,
+		'grid_color'          => 'grey'
 	);
 
 	if ($return) {
@@ -3776,7 +3685,7 @@ function graph_custom_sql_graph ($id, $width, $height,
 				"white",
 				false,
 				false,
-				"black"
+				"c1c1c1"
 			);
 			break;
 		case 'sql_graph_hbar': // horizontal bar
@@ -3798,7 +3707,7 @@ function graph_custom_sql_graph ($id, $width, $height,
 				$ttl,
 				$homeurl,
 				'white',
-				'black'
+				'c1c1c1'
 			);
 			break;
 		case 'sql_graph_pie': // Pie
@@ -3825,8 +3734,9 @@ function graph_graphic_agentevents ($id_agent, $width, $height, $period = 0, $ho
 	
 	$data = array ();
 	
-	$resolution = $config['graph_res'] * ($period * 2 / $width); // Number of "slices" we want in graph
-	
+	//$resolution = $config['graph_res'] * ($period * 2 / $width); // Number of "slices" we want in graph
+	$resolution = 5 * ($period * 2 / $width); // Number of "slices" we want in graph
+
 	$interval = (int) ($period / $resolution);
 	$date = get_system_time ();
 	$datelimit = $date - $period;
@@ -3932,7 +3842,8 @@ function graph_graphic_moduleevents ($id_agent, $id_module, $width, $height, $pe
 
 	$data = array ();
 
-	$resolution = $config['graph_res'] * ($period * 2 / $width); // Number of "slices" we want in graph
+	//$resolution = $config['graph_res'] * ($period * 2 / $width); // Number of "slices" we want in graph
+	$resolution = 5 * ($period * 2 / $width); // Number of "slices" we want in graph
 	$interval = (int) ($period / $resolution);
 	$date = get_system_time ();
 	$datelimit = $date - $period;
@@ -4373,10 +4284,12 @@ function graphic_module_events ($id_module, $width, $height, $period = 0, $homeu
 	global $graphic_type;
 
 	$data = array ();
+//XXXXXX
 $width = 90;
 $height = 100;
-	$resolution = $config['graph_res'] * ($period * 2 / $width); // Number of "slices" we want in graph
 
+	//$resolution = $config['graph_res'] * ($period * 2 / $width); // Number of "slices" we want in graph
+	$resolution = 5 * ($period * 2 / $width); // Number of "slices" we want in graph
 	$interval = (int) ($period / $resolution);
 	if ($date === false) {
 		$date = get_system_time ();

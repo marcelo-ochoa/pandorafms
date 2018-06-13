@@ -93,7 +93,6 @@ $id_agents = '';
 $inventory_modules = array();
 $date = null;
 // Only avg is selected by default for the simple graphs
-$only_avg = true;
 $fullscale = false;
 $percentil = false;
 $time_compare_overlapped = false;
@@ -202,7 +201,7 @@ switch ($action) {
 			$dyn_height = $style['dyn_height'];
 			$type = $item['type'];
 			$name = $item['name'];
-			
+
 			switch ($type) {
 				case 'event_report_log':
 					$period = $item['period'];
@@ -215,7 +214,6 @@ switch ($action) {
 					$log_number = empty($es['log_number']) ? $log_number : $es['log_number'];
 					break;
 				case 'simple_graph':
-					$only_avg = isset($style['only_avg']) ? (bool) $style['only_avg'] : true;
 					$fullscale = isset($style['fullscale']) ? (bool) $style['fullscale'] : 0;
 					$percentil = isset($style['percentil']) ? $config['percentil'] : 0;
 					// The break hasn't be forgotten.
@@ -839,6 +837,7 @@ You can of course remove the warnings, that's why we include the source and do n
 				<?php echo __('Working time');?>
 			</td>
 			<td>
+				<?php echo ui_get_using_system_timezone_warning(); ?>
 				<table border="0">
 					<tr>
 						<td>
@@ -1367,7 +1366,7 @@ You can of course remove the warnings, that's why we include the source and do n
 				?>
 			</td>
 		</tr>
-		
+
 		<tr id="row_time_compare_overlapped" style="" class="datos">
 			<td style="font-weight:bold;"><?php echo __('Time compare (Overlapped)');?></td>
 			<td>
@@ -1376,20 +1375,18 @@ You can of course remove the warnings, that's why we include the source and do n
 				?>
 			</td>
 		</tr>
-		
-		<tr id="row_only_avg" style="" class="datos">
-			<td style="font-weight:bold;"><?php echo __('Only average');?></td>
-			<td><?php html_print_checkbox('only_avg', 1, $only_avg);?></td>
-		</tr>
+
 		<tr id="row_fullscale" style="" class="datos">
 			<td style="font-weight:bold;"><?php echo __('Full resolution graph (TIP)').
 					ui_print_help_tip(__('This option may cause performance issues.'), true);?></td>
 			<td><?php html_print_checkbox('fullscale', 1, $fullscale);?></td>
 		</tr>
+
 		<tr id="row_percentil" style="" class="datos">
 			<td style="font-weight:bold;"><?php echo __('Percentil');?></td>
 			<td><?php html_print_checkbox('percentil', 1, $percentil);?></td>
 		</tr>
+
 		<tr id="row_exception_condition_value" style="" class="datos">
 			<td style="font-weight:bold;"><?php echo __('Value'); ?></td>
 			<td style="">
@@ -1399,6 +1396,7 @@ You can of course remove the warnings, that's why we include the source and do n
 				?>
 			</td>
 		</tr>
+
 		<tr id="row_exception_condition" style="" class="datos">
 			<td style="font-weight:bold;"><?php echo __('Condition');?></td>
 			<td>
@@ -2824,7 +2822,6 @@ function chooseType() {
 	$("#row_show_address_agent").hide();
 	$("#row_show_graph").hide();
 	$("#row_max_min_avg").hide();
-	$("#row_only_avg").hide();
 	$("#row_fullscale").hide();
 	$("#row_time_compare_overlapped").hide();
 	$("#row_quantity").hide();
@@ -2919,7 +2916,6 @@ function chooseType() {
 		
 		case 'simple_graph':
 			$("#row_time_compare_overlapped").show();
-			// $("#row_only_avg").show();
 			$("#row_fullscale").show();
 			if ($("#checkbox-percentil").prop("checked"))
 				$("#row_percentil").show();

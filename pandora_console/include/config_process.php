@@ -22,8 +22,8 @@
 /**
  * Pandora build version and version 
  */
-$build_version = 'PC180610';
-$pandora_version = 'v7.0NG.723';
+$build_version = 'PC180613';
+$pandora_version = 'v7.0NG.724';
 
 // Do not overwrite default timezone set if defined.
 $script_tz = @date_default_timezone_get();
@@ -199,8 +199,6 @@ else {
 
 // Save the global values
 $config["global_block_size"] = $config["block_size"];
-$config["global_flash_charts"] = $config["flash_charts"];
-
 
 if (isset ($config['id_user'])) {
 	config_user_set_custom_config();

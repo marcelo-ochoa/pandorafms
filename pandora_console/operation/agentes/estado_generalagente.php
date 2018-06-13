@@ -239,7 +239,7 @@ if ($agent["ultimo_contacto_remoto"] == "01-01-1970 00:00:00") {
 	$data[1] .= __('Never');
 }
 else {
-	$data[1] .= $agent["ultimo_contacto_remoto"];
+	$data[1] .= date_w_fixed_tz($agent["ultimo_contacto_remoto"]);
 }
 
 $table_contact->data[] = $data;
@@ -284,7 +284,7 @@ if ($config["agentaccess"] && $access_agent > 0) {
 		<legend>' .
 				__('Agent access rate (24h)') .
 		'</legend>' .
-			graphic_agentaccess($id_agente, '90%', 150, SECONDS_1DAY, true) .
+			graphic_agentaccess($id_agente, '95%', 100, SECONDS_1DAY, true) .
 	'</fieldset>';
 	$table_data->style[0] = 'width: 20%;';
 	$table_data->style[1] = 'width: 30%;';
