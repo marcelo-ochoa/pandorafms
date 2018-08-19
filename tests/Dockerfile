@@ -95,11 +95,25 @@ RUN yum install -y \
 	perl-Encode-Locale \
 	net-snmp \
 	net-snmp-utils \
+	fontconfig \
+	freetype \
+	freetype-devel \
+	fontconfig-devel \
+	libstdc++ \
 	perl-Test-Simple; yum clean all;
 
 RUN wget http://rpmfind.net/linux/centos/6.9/os/i386/Packages/gettext-0.17-18.el6.i686.rpm; \
 	yum localinstall -y gettext-0.17-18.el6.i686.rpm; \
-	rm -rf gettext-0.17-18.el6.i686.rpm;
+	rm -rf gettext-0.17-18.el6.i686.rpm; \
+	wget http://ftp.tu-chemnitz.de/pub/linux/dag/redhat/el6/en/x86_64/rpmforge/RPMS/perl-Geo-IP-1.38-1.el6.rf.x86_64.rpm; \
+	yum localinstall -y perl-Geo-IP-1.38-1.el6.rf.x86_64.rpm; \
+	rm -rf perl-Geo-IP-1.38-1.el6.rf.x86_64.rpm;
+
+#Install phantomjs required for export graph pdf.
+RUN mkdir -p /opt/phantomjs/bin && cd /opt/phantomjs/bin; \
+	wget https://netcologne.dl.sourceforge.net/project/pandora/Tools%20and%20dependencies%20%28All%20versions%29/DEB%20Debian%2C%20Ubuntu/phantomjs; \
+	chmod +x phantomjs; \
+	ln -s /opt/phantomjs/bin/phantomjs /usr/bin/;
 
 #Exposing ports for: HTTP, SNMP Traps, Tentacle protocol
 EXPOSE 80 162/udp 41121

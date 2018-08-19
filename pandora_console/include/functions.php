@@ -1360,11 +1360,41 @@ function safe_sql_string($string) {
 
 function is_metaconsole() {
 	global $config;
-	
-	if ($config['metaconsole'])
-		return true;
-	else
-		return false;
+	return (bool) $config['metaconsole'];
+}
+
+/**
+ * @brief Check if there is management operations are allowed in current context
+ * (node // meta)
+ *
+ * @return bool
+ */
+function is_management_allowed() {
+	global $config;
+	return ( (is_metaconsole() && $config["centralized_management"])
+		|| (!is_metaconsole() && !$config["centralized_management"]));
+}
+
+/**
+ * @brief Check if there is centralized management in metaconsole environment.
+ * 			Usefull to display some policy features on metaconsole.
+ *
+ * @return bool
+ */
+function is_central_policies() {
+	global $config;
+	return is_metaconsole() && $config["centralized_management"];
+}
+
+/**
+ * @brief Check if there is centralized management in node environment. Usefull
+ * 			to reduce the policy functionallity on nodes.
+ *
+ * @return bool
+ */
+function is_central_policies_on_node() {
+	global $config;
+	return (!is_metaconsole()) && $config["centralized_management"];
 }
 
 /**
@@ -2967,7 +2997,6 @@ function color_graph_array(){
 		'alpha' => CHART_DEFAULT_ALPHA
 	);
 
-	//XXX Colores fijos para eventos, alertas, desconocidos, percentil, overlapped, summatory, average, projection
 	$color_series['event'] = array(
 		'border' => '#ff0000',
 		'color' => '#FF5733',
@@ -3053,10 +3082,20 @@ function series_type_graph_array($data, $show_elements_graph){
 
 	if($show_elements_graph['id_widget_dashboard']){
 		$opcion = unserialize(db_get_value_filter('options','twidget_dashboard',array('id' => $show_elements_graph['id_widget_dashboard'])));
-		foreach ($opcion as $key => $value) {
+		if($show_elements_graph['graph_combined']){
+
+			foreach ($show_elements_graph['modules_id'] as $key => $value) {
+				$color_series[$key] = array(
+					'border' => '#000000',
+					'color' => $opcion[$value],
+					'alpha' => CHART_DEFAULT_ALPHA
+				);
+			}
+		}
+		else{
 			$color_series[0] = array(
 				'border' => '#000000',
-				'color' => $opcion['avg'],
+				'color' => $opcion['max'],
 				'alpha' => CHART_DEFAULT_ALPHA
 			);
 		}
@@ -3084,7 +3123,7 @@ function series_type_graph_array($data, $show_elements_graph){
 			elseif(strpos($key, 'sum') !== false || strpos($key, 'baseline') !== false){
 				switch ($value['id_module_type']) {
 					case 21: case 2: case 6:
-					case 18: case 9: case 31:
+					case 18: case 9: case 31: case 100:
 						$data_return['series_type'][$key] = 'boolean';
 						break;
 					default:
@@ -3095,20 +3134,53 @@ function series_type_graph_array($data, $show_elements_graph){
 				if (isset($show_elements_graph['labels']) &&
 					is_array($show_elements_graph['labels']) &&
 					(count($show_elements_graph['labels']) > 0)){
-					$data_return['legend'][$key] = $show_elements_graph['labels'][$value['agent_module_id']] . ' ' ;
+						$name_legend = $data_return['legend'][$key] = $show_elements_graph['labels'][$value['agent_module_id']] . ' ' ;
 				}
 				else{
 					if(strpos($key, 'baseline') !== false){
-						$data_return['legend'][$key] = $value['agent_alias']  . ' / ' .
+						$name_legend = $data_return['legend'][$key] = $value['agent_alias']  . ' / ' .
 													$value['module_name'] . ' Baseline ';
 					}
 					else{
-						$data_return['legend'][$key] = $value['agent_alias']  . ' / ' .
+						$name_legend = $data_return['legend'][$key] = $value['agent_alias']  . ' / ' .
 													$value['module_name'] . ': ';
 					}
 				}
 
-				if(strpos($key, 'baseline') === false){
+				$data_return['legend'][$key] .=
+					__('Min:') . remove_right_zeros(
+						number_format(
+							$value['min'],
+							$config['graph_precision']
+						)
+					)  . ' ' .
+					__('Max:') . remove_right_zeros(
+						number_format(
+							$value['max'],
+							$config['graph_precision']
+						)
+					) . ' ' .
+					_('Avg:') . remove_right_zeros(
+						number_format(
+							$value['avg'],
+							$config['graph_precision']
+						)
+					) . ' ' . $str;
+
+				if($show_elements_graph['compare'] == 'overlapped' && $key == 'sum2'){
+					$data_return['color'][$key] = $color_series['overlapped'];
+				}
+				else{
+					$data_return['color'][$key] = $color_series[$i];
+					$i++;
+				}
+			}
+			elseif(!$show_elements_graph['fullscale'] && strpos($key, 'min') !== false ||
+					!$show_elements_graph['fullscale'] && strpos($key, 'max') !== false){
+				$data_return['series_type'][$key] = $type_graph;
+
+				$data_return['legend'][$key] = $name_legend;
+				if($show_elements_graph['type_mode_graph']){
 					$data_return['legend'][$key] .=
 						__('Min:') . remove_right_zeros(
 							number_format(
@@ -3168,13 +3240,7 @@ function series_type_graph_array($data, $show_elements_graph){
 						__('Percentil') . ' ' .
 						$config['percentil']  .
 						'º ' . __('of module') . ' ';
-					if (isset($show_elements_graph['labels']) && is_array($show_elements_graph['labels'])){
-						$data_return['legend'][$key] .= $show_elements_graph['labels'][$value['agent_module_id']] . ' ' ;
-					}
-					else{
-						$data_return['legend'][$key] .= $value['agent_alias']  . ' / ' .
-												$value['module_name'] . ': ' . ' Value: ';
-					}
+					$data_return['legend'][$key] .= $name_legend;
 					$data_return['legend'][$key] .= remove_right_zeros(
 													number_format(
 														$value['data'][0][1],
@@ -3195,6 +3261,9 @@ function series_type_graph_array($data, $show_elements_graph){
 				$data_return['color'][$key] = $color_series[$i];
 				$i++;
 			}
+			if($i > 14){
+				$i = 0;
+			}
 		}
 		return $data_return;
 	}
@@ -3205,13 +3274,15 @@ function generator_chart_to_pdf($type_graph_pdf, $params, $params_combined = fal
 	global $config;
 
 	$file_js  = $config["homedir"] . "/include/web2image.js";
-	$url      = $config["homeurl"] . "/include/chart_generator.php";
+	$url      = $config["homeurl"] . "include/chart_generator.php";
 	$img_file = "img_". uniqid()  .".png";
 	$img_path = $config["homedir"] . "/attachment/" . $img_file;
 	$img_url  = $config["homeurl"] . "attachment/" . $img_file;
 
 	$width_img  = 500;
-	$height_img = 450;
+	$height_img = (isset($config['graph_image_height'])) ? $config['graph_image_height'] : 350;
+
+	$params['height'] = $height_img;
 
 	$params_encode_json = urlencode(json_encode($params));
 
@@ -3225,24 +3296,27 @@ function generator_chart_to_pdf($type_graph_pdf, $params, $params_combined = fal
 
 	$session_id = session_id();
 
-	$result = exec(
-		$config['phantomjs_bin'] ."/phantomjs " . $file_js . " " .
-		$url . "  '" .
-		$type_graph_pdf . "' '" .
-		$params_encode_json . "' '" .
-		$params_combined . "' '" .
-		$module_list . "' " .
-		$img_path . " " .
-		$width_img . " " .
-		$height_img . " '" .
-		$session_id . "' " .
-		$params['return_img_base_64']
-	);
+	$cmd = '"' . io_safe_output($config['phantomjs_bin']) . DIRECTORY_SEPARATOR . 'phantomjs" --ssl-protocol=any --ignore-ssl-errors=true "' . $file_js . '" '
+		. ' "' . $url . '"'
+		. ' "' . $type_graph_pdf . '"'
+		. ' "' . $params_encode_json . '"'
+		. ' "' . $params_combined . '"'
+		. ' "' . $module_list . '"'
+		. ' "' . $img_path . '"'
+		. ' "' . $width_img . '"'
+		. ' "' . $height_img . '"'
+		. ' "' . $session_id . '"'
+		. ' "' . $params['return_img_base_64'] . '"';
+
+	$result = exec($cmd);
 
 	if($params['return_img_base_64']){
+		// To be used in alerts
+		$width_img  = 500;
 		return $result;
 	}
 	else{
+		// to be used in PDF files
 		$config["temp_images"][] = $img_path;
 		return '<img src="' . $img_url . '" />';
 	}

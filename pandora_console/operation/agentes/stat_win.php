@@ -29,6 +29,7 @@ require_once ($config['homedir'] . '/include/functions_graph.php');
 require_once ($config['homedir'] . '/include/functions_modules.php');
 require_once ($config['homedir'] . '/include/functions_agents.php');
 require_once ($config['homedir'] . '/include/functions_tags.php');
+enterprise_include_once('include/functions_agents.php');
 
 check_login ();
 
@@ -112,21 +113,8 @@ $alias    = db_get_value ("alias","tagente","id_agente",$id_agent);
 		}
 
 		// ACL
-		$permission  = false;
-		$agent_group = (int) agents_get_agent_group($agent_id);
-		$strict_user = (bool) db_get_value("strict_acl", "tusuario",
-			"id_user", $config['id_user']);
-
-		if (!empty($agent_group)) {
-			if ($strict_user) {
-				$permission = tags_check_acl_by_module($id, $config['id_user'], 'RR') === true;
-			}
-			else {
-				$permission = check_acl($config['id_user'], $agent_group, "RR");
-			}
-		}
-
-		if (!$permission) {
+		$all_groups = agents_get_all_groups_agent($agent_id);
+		if (!check_acl_one_of_groups ($config["id_user"], $all_groups, "AR")) {
 			require ($config['homedir'] . "/general/noaccess.php");
 			exit;
 		}
@@ -141,7 +129,7 @@ $alias    = db_get_value ("alias","tagente","id_agente",$id_agent);
 		$start_time = get_parameter ("start_time", date("H:i:s"));
 		$draw_events = get_parameter ("draw_events", 0);
 		$graph_type = get_parameter ("type", "sparse");
-		$zoom = get_parameter ("zoom", 1);
+		$zoom = get_parameter ("zoom", $config['zoom_graph']);
 		$baseline = get_parameter ("baseline", 0);
 		$show_events_graph = get_parameter ("show_events_graph", 0);
 		$show_percentil = get_parameter ("show_percentil", 0);
@@ -296,18 +284,20 @@ $alias    = db_get_value ("alias","tagente","id_agente",$id_agent);
 		$table->data[] = $data;
 		$table->rowclass[] = '';
 
-		$data = array();
-		$data[0] = __('Zoom');
-		$options = array ();
-		$options[$zoom] = 'x' . $zoom;
-		$options[1] = 'x1';
-		$options[2] = 'x2';
-		$options[3] = 'x3';
-		$options[4] = 'x4';
-		$options[5] = __('full');
-		$data[1] = html_print_select ($options, "zoom", $zoom, '', '', 0, true, false, false);
-		$table->data[] = $data;
-		$table->rowclass[] = '';
+		if(!modules_is_boolean($id)){
+			$data = array();
+			$data[0] = __('Zoom');
+			$options = array ();
+			$options[$zoom] = 'x' . $zoom;
+			$options[1] = 'x1';
+			$options[2] = 'x2';
+			$options[3] = 'x3';
+			$options[4] = 'x4';
+			$options[5] = 'x5';
+			$data[1] = html_print_select ($options, "zoom", $zoom, '', '', 0, true, false, false);
+			$table->data[] = $data;
+			$table->rowclass[] = '';
+		}
 
 		$data = array();
 		$data[0] = __('Time range');
@@ -384,6 +374,9 @@ $alias    = db_get_value ("alias","tagente","id_agente",$id_agent);
 		$table->rowclass[] = '';
 
 		$form_table = html_print_table($table, true);
+		$form_table .= '<div style="width:100%; text-align:right;">' .
+			html_print_submit_button(__('Reload'), "submit", false,
+				'class="sub upd"', true) . "</div>";
 
 		unset($table);
 
@@ -397,14 +390,6 @@ $alias    = db_get_value ("alias","tagente","id_agente",$id_agent);
 		$data = array();
 		$data[0] = html_print_div(array('id' => 'field_list', 'content' => $form_table,
 			'style' => 'overflow: auto; height: 220px'), true);
-		$table->data[] = $data;
-		$table->rowclass[] = '';
-
-		$data = array();
-		$data[0] = '<div style="width:100%; text-align:right;">' .
-			html_print_submit_button(__('Reload'), "submit", false,
-				'class="sub upd"', true) .
-			"</div>";
 		$table->data[] = $data;
 		$table->rowclass[] = '';
 
@@ -471,6 +456,6 @@ ui_include_time_picker(true);
 	});
 
 	$(window).resize(function() {
-		$("#field_list").css('height', ($(window).height() - 160) + 'px');
+		$("#field_list").css('height', ($(document).height() - 160) + 'px');
 	});
 </script>

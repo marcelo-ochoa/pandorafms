@@ -400,7 +400,7 @@ function pandoraFlotHBars(graph_id, values, labels, water_mark,
 		// with all 0 values.
 		options['yaxis']['tickDecimals'] = 0;
 	}
-	
+
 	if (max) {
 		options['xaxis']['max'] = max;
 	}
@@ -409,15 +409,14 @@ function pandoraFlotHBars(graph_id, values, labels, water_mark,
 	}
 
 	var plot = $.plot($('#' + graph_id), datas, options );
-	
+
 	$('#' + graph_id).HUseTooltip();
 	$('#' + graph_id).css("margin-left","auto");
 	$('#' + graph_id).css("margin-right","auto");
 	//~ $('#' + graph_id).find('div.legend-tooltip').tooltip({ track: true });
-	
+
 	function yFormatter(v, axis) {
 		format = new Array();
-		
 		for (i = 0; i < labels_total.length; i++) {
 			var label = labels_total[i][1];
 			// var shortLabel = reduceText(label, 25);
@@ -427,8 +426,10 @@ function pandoraFlotHBars(graph_id, values, labels, water_mark,
 				label  = reduceText(label, 30);
 			}
 			var div_attributes = 'style="font-size:'+font_size+'pt !important;'
-			 	+ ' margin: 0; max-width: 150px;'
-			 	+ 'margin-right:5px;';
+				+ ' margin: 0; max-width: 150px;'
+				+ 'margin-right:5px';
+				+ 'margin-left: -1.5em';
+				+ 'text-align: right';
 
 			if (label.indexOf("<br>") != -1) {
 				div_attributes += "min-height: 2.5em;";
@@ -442,7 +443,7 @@ function pandoraFlotHBars(graph_id, values, labels, water_mark,
 		}
 		return format;
 	}
-	
+
 	function xFormatter(v, axis) {
 		label = parseFloat(v);
 		text = label.toLocaleString();
@@ -861,12 +862,11 @@ function pandoraFlotArea( graph_id, values, legend,
 	series_type, color, water_mark, date_array,
 	data_module_graph, params, events_array
 ) {
-
 	//diferents vars
 	var unit             = params.unit ? params.unit : '';
 	var homeurl          = params.homeurl;
-	var font_size        = params.font_size;
-	var font             = params.font;
+	var font_size        = parseInt(params.font_size);
+	var font             = params.font.split("/").pop().split(".").shift();
 	var width            = params.width;
 	var height           = params.height;
 	var vconsole         = params.vconsole;
@@ -874,13 +874,14 @@ function pandoraFlotArea( graph_id, values, legend,
 	var menu             = params.menu;
 	var min_x            = date_array['start_date'] *1000;
 	var max_x            = date_array['final_date'] *1000;
-	var type             = params.stacked;
+	var type             = parseInt(params.stacked);
 	var show_legend      = params.show_legend;
 	var image_treshold   = params.image_treshold;
 	var short_data       = params.short_data;
 	var grid_color       = params.grid_color;
 	var background_color = params.backgroundColor;
 	var legend_color     = params.legend_color;
+	var update_legend    = {};
 
 	//XXXXXX colocar
 	var force_integer    = 0;
@@ -1553,6 +1554,12 @@ function pandoraFlotArea( graph_id, values, legend,
 					break;
 			}
 
+			if(series_type[index] != 'boolean'){
+				if(value.slice_data){
+					update_legend[index] = value.slice_data;
+				}
+			}
+
 			//in graph stacked unset percentil
 			if(	! ( (type == 1) && ( /percentil/.test(index) ) == true ) &&
 				! ( (type == 3) && ( /percentil/.test(index) ) == true )   ){
@@ -1580,12 +1587,7 @@ function pandoraFlotArea( graph_id, values, legend,
 	});
 
 	// The first execution, the graph data is the base data
-	datas     = data_base;
-
-	// minTickSize
-	var count_data = datas[0].data.length;
-	var min_tick   = datas[0].data[0][0];
-	var max_tick   = datas[0].data[count_data - 1][0];
+	datas = data_base;
 
 	var number_ticks = 8;
 	if(vconsole){
@@ -1593,7 +1595,7 @@ function pandoraFlotArea( graph_id, values, legend,
 	}
 
 	var maxticks = date_array['period'] / 3600 / number_ticks;
-console.log(grid_color);
+
 	var options = {
 			series: {
 				stack: stacked,
@@ -1623,27 +1625,30 @@ console.log(grid_color);
 			},
 			xaxis: {
 				min: min_x,
-				max: max_x
+				max: max_x,
+				font: {
+					size: font_size + 2,
+					color: legend_color,
+					family: font+'Font'
+				}
 			},
 			xaxes: [{
-				axisLabelUseCanvas: true,
-				axisLabelFontSizePixels: font_size,
-				axisLabelFontFamily: font+'Font',
-				axisLabelPadding: 0,
 				mode: "time",
 				timezone: "browser",
 				localTimezone: true,
-				//tickFormatter: xFormatter,
 				tickSize: [maxticks, 'hour']
 			}],
+			yaxis: {
+				font: {
+					size: font_size + 2,
+					color: legend_color,
+					family: font+'Font',
+					variant: "small-caps"
+				},
+			},
 			yaxes: [{
 				tickFormatter: yFormatter,
-				color: '',
-				alignTicksWithAxis: 1,
-				labelWidth: 30,
-				position: 'left',
-				font: font,
-				reserveSpace: true
+				position: 'left'
 			}],
 			legend: {
 				position: 'se',
@@ -1676,15 +1681,17 @@ console.log(grid_color);
 		}
 	}
 
-/*//XXXXXXXREvisar esto
-if (vconsole) {
-		var myCanvas = plot.getCanvas();
-		plot.setupGrid(); // redraw plot to new size
-		plot.draw();
-		var image = myCanvas.toDataURL("image/png");
-		return;
-	}
-*/
+	/*
+		//XXXREvisar esto
+		if (vconsole) {
+			var myCanvas = plot.getCanvas();
+			plot.setupGrid(); // redraw plot to new size
+			plot.draw();
+			var image = myCanvas.toDataURL("image/png");
+			return;
+		}
+	*/
+
 	// Adjust the overview plot to the width and position of the main plot
 	adjust_left_width_canvas(graph_id, 'overview_'+graph_id);
 	update_left_width_canvas(graph_id);
@@ -1725,27 +1732,29 @@ if (vconsole) {
 			},
 			xaxis: {
 				min: date_array.start_date * 1000,
-				max: date_array.final_date * 1000
+				max: date_array.final_date * 1000,
+				font: {
+					size: font_size + 2,
+					color: legend_color,
+					family: font+'Font'
+				}
 			},
 			xaxes: [{
-				axisLabelUseCanvas: true,
-				axisLabelFontSizePixels: font_size,
-				axisLabelFontFamily: font+'Font',
-				axisLabelPadding: 0,
 				mode: "time",
 				timezone: "browser",
 				localTimezone: true,
-				//tickFormatter: xFormatter,
 				tickSize: [maxticks, 'hour']
 			}],
+			yaxis: {
+				font: {
+					size: font_size + 2,
+					color: legend_color,
+					family: font+'Font'
+				},
+			},
 			yaxes: [{
 				tickFormatter: yFormatter,
-				color: '',
-				alignTicksWithAxis: 1,
-				labelWidth: 30,
-				position: 'left',
-				font: font,
-				reserveSpace: true
+				position: 'left'
 			}],
 			legend: {
 				position: 'se',
@@ -1755,12 +1764,14 @@ if (vconsole) {
 		});
 	}
 
-	$('#legend_' + graph_id + ' .legendLabel').css('color', legend_color);
-
 	// Adjust overview when main chart is resized
 	$('#overview_'+graph_id).resize(function(){
 		update_left_width_canvas(graph_id);
 	});
+
+	var max_draw = [];
+	max_draw['max'] = plot.getAxes().yaxis.max;
+	max_draw['min'] = plot.getAxes().yaxis.min;
 
 	// Connection between plot and miniplot
 	$('#' + graph_id).bind('plotselected', function (event, ranges) {
@@ -1779,12 +1790,25 @@ if (vconsole) {
 			}
 		}
 
+		if(thresholded){
+			var y_recal = axis_thresholded(
+				threshold_data,
+				plot.getAxes().yaxis.min,
+				plot.getAxes().yaxis.max,
+				red_threshold, extremes,
+				red_up
+			);
+		}
+		else{
+			var y_recal = ranges.yaxis;
+		}
+
 		if (thresholded) {
 			data_base_treshold = add_threshold (
 				data_base,
 				threshold_data,
 				ranges.yaxis.from,
-				ranges.yaxis.to,
+				y_recal.max,
 				red_threshold,
 				extremes,
 				red_up,
@@ -1800,31 +1824,31 @@ if (vconsole) {
 					},
 					xaxis: {
 						min: ranges.xaxis.from,
-						max: ranges.xaxis.to
+						max: ranges.xaxis.to,
+						font: {
+							size: font_size + 2,
+							color: legend_color,
+							family: font+'Font'
+						}
 					},
 					xaxes: [{
-						axisLabelUseCanvas: true,
-						axisLabelFontSizePixels: font_size,
-						axisLabelFontFamily: font+'Font',
-						axisLabelPadding: 0,
 						mode: "time",
 						timezone: "browser",
 						localTimezone: true,
-						//tickFormatter: xFormatter,
 						tickSize: [maxticks_zoom, 'hour']
 					}],
 					yaxis:{
 						min: ranges.yaxis.from,
-						max: ranges.yaxis.to
+						max: y_recal.max,
+						font: {
+							size: font_size + 2,
+							color: legend_color,
+							family: font+'Font'
+						},
 					},
 					yaxes: [{
 						tickFormatter: yFormatter,
-						color: '',
-						alignTicksWithAxis: 1,
-						labelWidth: 30,
-						position: 'left',
-						font: font,
-						reserveSpace: true,
+						position: 'left'
 					}],
 					legend: {
 						show: true
@@ -1841,31 +1865,31 @@ if (vconsole) {
 					},
 					xaxis: {
 						min: ranges.xaxis.from,
-						max: ranges.xaxis.to
+						max: ranges.xaxis.to,
+						font: {
+							size: font_size + 2,
+							color: legend_color,
+							family: font+'Font'
+						}
 					},
 					xaxes: [{
-						axisLabelUseCanvas: true,
-						axisLabelFontSizePixels: font_size,
-						axisLabelFontFamily: font+'Font',
-						axisLabelPadding: 0,
 						mode: "time",
 						timezone: "browser",
 						localTimezone: true,
-						//tickFormatter: xFormatter,
 						tickSize: [maxticks_zoom, 'hour']
 					}],
 					yaxis:{
 						min: ranges.yaxis.from,
-						max: ranges.yaxis.to
+						max: ranges.yaxis.to,
+						font: {
+							size: font_size + 2,
+							color: legend_color,
+							family: font+'Font'
+						},
 					},
 					yaxes: [{
 						tickFormatter: yFormatter,
-						color: '',
-						alignTicksWithAxis: 1,
-						labelWidth: 30,
-						position: 'left',
-						font: font,
-						reserveSpace: true,
+						position: 'left'
 					}],
 					legend: {
 						show: true
@@ -1874,6 +1898,9 @@ if (vconsole) {
 		}
 
 		$('#menu_cancelzoom_' + graph_id).attr('src', homeurl + '/images/zoom_cross_grey.png');
+
+		max_draw['max'] = ranges.yaxis.to;
+		max_draw['min'] = ranges.yaxis.from;
 
 		// don't fire event on the overview to prevent eternal loop
 		overview.setSelection(ranges, true);
@@ -1930,6 +1957,10 @@ if (vconsole) {
 						$('#timestamp_'+graph_id).height() +
 						$('#legend_' + graph_id).height());
 
+		$('#timestamp_'+graph_id).css('color', legend_color);
+		$('#timestamp_'+graph_id).css('font-size', font_size + 2+'px');
+		$('#timestamp_'+graph_id).css('font-family', font + 'Font');
+
 		if (timesize+timenewpos > canvaslimit) {
 			$('#timestamp_'+graph_id).css('left', timenewpos - timesize);
 		}
@@ -1955,49 +1986,80 @@ if (vconsole) {
 
 				if(series.data[j]){
 					var y = series.data[j][1];
+					var x = series.data[j][0] -1 ;
 				}
 			}
 
-			var how_bigger = "";
-			if (y > 1000000) {
-				how_bigger = "M";
-				y = y / 1000000;
-			}
-			else if (y > 1000) {
-				how_bigger = "K";
-				y = y / 1000;
-			}
-			else if(y < -1000000) {
-				how_bigger = "M";
-				y = y / 1000000;
-			}
-			else if (y < -1000) {
-				how_bigger = "K";
-				y = y / 1000;
-			}
+			y_array = format_unit_yaxes(y);
 
-			var label_aux = legend[series.label];
+			y          = y_array['y'];
+			how_bigger = y_array['unit'];
+
+			var data_legend = [];
 
 			// The graphs of points type and unknown graphs will dont be updated
 			if (series_type[dataset[k]["label"]] != 'points' &&
 				series_type[dataset[k]["label"]] != 'unknown' &&
 				series_type[dataset[k]["label"]] != 'percentil'
 			) {
-				$('#legend_' + graph_id + ' .legendLabel')
-					.eq(i).html(label_aux +	' value = ' +
-					(short_data ? number_format(y, 0, "", short_data) : parseFloat(y)) +
-					how_bigger + ' ' + unit
-				);
+				if(Object.keys(update_legend).length == 0){
+					var label_aux = legend[series.label];
+
+					$('#legend_' + graph_id + ' .legendLabel')
+						.eq(i).html(label_aux +	' value = ' +
+						(short_data ? number_format(y, 0, "", short_data) : parseFloat(y)) +
+						how_bigger + ' ' + unit
+					);
+				}
+				else{
+					$.each(update_legend, function (index, value) {
+						if(!value[x]){
+							x = x +1;
+						}
+						if(value[x].min){
+							min_y_array = format_unit_yaxes(value[x].min);
+							min_y       = min_y_array['y'];
+							min_bigger  = min_y_array['unit'];
+						}
+						else{
+							min_y       = 0;
+							min_bigger  = "";
+						}
+
+						if(value[x].max){
+							max_y_array = format_unit_yaxes(value[x].max);
+							max_y       = max_y_array['y'];
+							max_bigger  = max_y_array['unit'];
+						}
+						else{
+							max_y       = 0;
+							max_bigger  = "";
+						}
+
+						if(value[x].avg){
+							avg_y_array = format_unit_yaxes(value[x].avg);
+							avg_y       = avg_y_array['y'];
+							avg_bigger  = avg_y_array['unit'];
+						}
+						else{
+							avg_y       = 0;
+							avg_bigger  = "";
+						}
+
+						data_legend[index] =
+							' Min: ' + (short_data ? number_format(min_y, 0, "", short_data) : parseFloat(min_y)) + min_bigger
+							+ ' Max: ' + (short_data ? number_format(max_y, 0, "", short_data) : parseFloat(max_y)) + max_bigger
+							+ ' Avg: ' + (short_data ? number_format(avg_y, 0, "", short_data) : parseFloat(avg_y)) + avg_bigger;
+					});
+
+					var label_aux = legend[series.label].split(":")[0] + data_legend[series.label];
+					$('#legend_' + graph_id + ' .legendLabel').eq(i).html(label_aux);
+				}
 			}
 
-			$('#legend_' + graph_id + ' .legendLabel')
-				.eq(i).css('font-size',font_size+'pt');
-
-			$('#legend_' + graph_id + ' .legendLabel')
-				.eq(i).css('color', legend_color);
-
-			$('#legend_' + graph_id + ' .legendLabel')
-				.eq(i).css('font-family',font);
+			$('#legend_' + graph_id + ' .legendLabel').eq(i).css('color', legend_color);
+			$('#legend_' + graph_id + ' .legendLabel').eq(i).css('font-size', font_size + 2 +'px');
+			$('#legend_' + graph_id + ' .legendLabel').eq(i).css('font-family', font + 'Font');
 
 			i++;
 		}
@@ -2132,7 +2194,7 @@ if (vconsole) {
 			data_base,
 			threshold_data,
 			plot.getAxes().yaxis.min,
-			plot.getAxes().yaxis.max,
+			y_recal.max,
 			red_threshold,
 			extremes,
 			red_up,
@@ -2163,32 +2225,14 @@ if (vconsole) {
 			$('#legend_' + graph_id + ' .legendLabel')
 				.eq(i).html(label_aux);
 		}
+		$('#legend_' + graph_id + ' .legendLabel').css('color', legend_color);
+		$('#legend_' + graph_id + ' .legendLabel').css('font-size', font_size + 2 +'px');
+		$('#legend_' + graph_id + ' .legendLabel').css('font-family', font + 'Font');
+
 		plot.clearCrosshair();
 		if(!vconsole){
 			overview.clearCrosshair();
 		}
-	}
-
-	// Format functions
-	function xFormatter(v, axis) {
-		var d = new Date(v);
-		var result_date_format = 0;
-
-		var monthNames = [
-			"Jan", "Feb", "Mar",
-			"Apr", "May", "Jun",
-			"Jul", "Aug", "Sep",
-			"Oct", "Nov", "Dec"
-		];
-
-		result_date_format = (d.getDate() <10?'0':'') + d.getDate() + " " +
-							monthNames[d.getMonth()] + " " +
-							d.getFullYear() + "\n" +
-							(d.getHours()<10?'0':'') + d.getHours() + ":" +
-							(d.getMinutes()<10?'0':'') + d.getMinutes() + ":" +
-							(d.getSeconds()<10?'0':'') + d.getSeconds();
-
-		return '<div class='+font+' style="font-size:'+font_size+'pt; margin-top:15px;">'+result_date_format+'</div>';
 	}
 
 	function yFormatter(v, axis) {
@@ -2207,25 +2251,19 @@ if (vconsole) {
 
 		// Get only two decimals
 		formatted = round_with_decimals(formatted, 100);
-		return '<div class='+font+' style="font-size:'+font_size+'pt;">'+formatted+'</div>';
+		return formatted;
 	}
 
 	function lFormatter(v, item) {
-		return '<div style="font-size:'+font_size+'pt;">'+legend[v]+'</div>';
+		return '<span style="color:'+legend_color+'">'+legend[v]+'</span>';
 	}
+
+	$('#overview_' + graph_id).css('display', 'none');
 
 	if (menu) {
 		var parent_height;
 		$('#menu_overview_' + graph_id).click(function() {
 			$('#overview_' + graph_id).toggle();
-			/*
-			if($('#overview_' + graph_id).css('visibility') == 'visible'){
-				$('#overview_' + graph_id).css('visibility', 'hidden');
-			}
-			else{
-				$('#overview_' + graph_id).css('visibility', 'visible');
-			}
-			*/
 		});
 
 		$("#menu_export_csv_"+graph_id)
@@ -2236,7 +2274,6 @@ if (vconsole) {
 
 		$('#menu_threshold_' + graph_id).click(function() {
 			datas = new Array();
-
 			if (thresholded) {
 				$.each(data_base, function() {
 						datas.push(this);
@@ -2247,7 +2284,8 @@ if (vconsole) {
 				plot = $.plot($('#' + graph_id), data_base,
 					$.extend(true, {}, options, {
 						yaxis: {
-							max: max_draw
+							min: max_draw['min'],
+							max: max_draw['max']
 						},
 						xaxis: {
 							min: plot.getAxes().xaxis.min,
@@ -2257,8 +2295,6 @@ if (vconsole) {
 				thresholded = false;
 			}
 			else {
-				var max_draw = plot.getAxes().yaxis.datamax;
-
 				if(!thresholded){
 					// Recalculate the y axis
 					var y_recal = axis_thresholded(
@@ -2277,7 +2313,7 @@ if (vconsole) {
 					data_base,
 					threshold_data,
 					plot.getAxes().yaxis.min,
-					plot.getAxes().yaxis.max,
+					y_recal.max,
 					red_threshold,
 					extremes,
 					red_up,
@@ -2287,7 +2323,8 @@ if (vconsole) {
 				plot = $.plot($('#' + graph_id), datas_treshold,
 						$.extend(true, {}, options, {
 							yaxis: {
-								max: y_recal.max,
+								min: max_draw['min'],
+								max: y_recal.max
 							},
 							xaxis: {
 								min: plot.getAxes().xaxis.min,
@@ -2312,6 +2349,7 @@ if (vconsole) {
 			overview.clearSelection();
 			currentRanges = null;
 			thresholded = false;
+			max_draw = [];
 		});
 
 		// Adjust the menu image on top of the plot
@@ -2324,8 +2362,6 @@ if (vconsole) {
 		// Add bottom margin in the legend
 		// Estimated height of 24 (works fine with this data in all browsers)
 		menu_height = 24;
-		var legend_margin_bottom = parseInt(
-		$('#legend_'+graph_id).css('margin-bottom').split('px')[0]);
 		$('#legend_'+graph_id).css('margin-bottom', '10px');
 		parent_height = parseInt($('#menu_'+graph_id).parent().css('height').split('px')[0]);
 		adjust_menu(graph_id, plot, parent_height, width, show_legend);
@@ -2337,6 +2373,33 @@ if (vconsole) {
 		}
 		//adjust_menu(graph_id, plot, parent_height, width, show_legend);
 	}
+}
+
+function format_unit_yaxes(y){
+	var how_bigger = [];
+
+	if (y > 1000000) {
+		how_bigger['unit'] = "M";
+		how_bigger['y'] = y / 1000000;
+	}
+	else if (y > 1000) {
+		how_bigger['unit'] = "K";
+		how_bigger['y'] = y / 1000;
+	}
+	else if(y < -1000000) {
+		how_bigger['unit'] = "M";
+		how_bigger['y']    = y / 1000000;
+	}
+	else if (y < -1000) {
+		how_bigger['unit'] = "K";
+		how_bigger['y'] = y / 1000;
+	}
+	else{
+		how_bigger['unit'] = "";
+		how_bigger['y'] = y;
+	}
+
+	return how_bigger;
 }
 
 function adjust_menu(graph_id, plot, parent_height, width, show_legend) {

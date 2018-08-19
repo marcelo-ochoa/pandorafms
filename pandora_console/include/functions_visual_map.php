@@ -965,6 +965,8 @@ function visual_map_print_item($mode = "read", $layoutData,
 						$height = 480;
 					}
 
+					$graphs = db_get_all_rows_field_filter ("tgraph", "id_graph", $layoutData['id_custom_graph']);
+
 					$params =array(
 						'period'              => $period,
 						'width'               => $width,
@@ -978,7 +980,11 @@ function visual_map_print_item($mode = "read", $layoutData,
 					);
 
 					$params_combined = array(
-						'id_graph'       => $layoutData['id_custom_graph']
+						'id_graph'       => $layoutData['id_custom_graph'],
+						'stacked'        => $graphs[0]["stacked"],
+						'summatory'      => $graphs[0]["summatory_series"],
+						'average'        => $graphs[0]["average_series"],
+						'modules_series' => $graphs[0]["modules_series"]
 					);
 
 					if ($layoutData['label_position']=='left') {
@@ -1725,15 +1731,27 @@ function visual_map_print_item($mode = "read", $layoutData,
 					$result = array_merge($result, $result_server);
 				}
 				
+				if ($connection) {
+					metaconsole_restore_db();
+				}
 			}
 		}
 		
 			if (($layoutData['image'] != null && $layoutData['image'] != 'none') || $layoutData['show_statistics'] == 1) {
 						
-				
 				$img_style_title = strip_tags($label);
 				if ($layoutData['type'] == STATIC_GRAPH) {
 					if ($layoutData['id_agente_modulo'] != 0) {
+						
+						if ($layoutData['id_metaconsole'] != 0) {
+							//Metaconsole db connection
+							$connection = db_get_row_filter ('tmetaconsole_setup',
+								array('id' => $layoutData['id_metaconsole']));
+							if (metaconsole_load_external_db($connection) != NOERR) {
+								continue;
+							}
+						}
+						
 						$unit_text = trim(io_safe_output(
 							modules_get_unit($layoutData['id_agente_modulo'])));
 						
@@ -1752,6 +1770,11 @@ function visual_map_print_item($mode = "read", $layoutData,
 							$img_style_title .=
 								" <br>" . __("Last value: ")
 								. remove_right_zeros(number_format($value, $config['graph_precision'])).$unit_text;
+						}
+						
+						if ($layoutData['id_metaconsole'] != 0) {
+							//Restore db connection
+							metaconsole_restore_db();
 						}
 					}
 					
@@ -2705,12 +2728,19 @@ function visual_map_process_wizard_add_modules ($id_modules, $image,
 function get_donut_module_data ($id_module) {
 	$mod_values = db_get_value_filter('datos', 'tagente_estado', array('id_agente_modulo' => $id_module));
 
+	$no_data_to_show = false;
+
 	if (preg_match("/\r\n/", $mod_values)) {
 		$values = explode("\r\n", $mod_values);
 	}
 	elseif (preg_match("/\n/", $mod_values)) {
 		$values = explode("\n", $mod_values);
 	}
+	else {
+		$values=array(__('No data to show').",1");
+		$no_data_to_show=true;
+	}
+		
 
 	$colors = array();
 	$colors[] = "#aa3333";
@@ -2731,7 +2761,12 @@ function get_donut_module_data ($id_module) {
 			if ($data[1] == 0) {
 				$data[1] = __('No data');
 			}
-			$values_to_return[$index]['tag_name'] = $data[0] . ": " . $data[1];
+
+			if ($no_data_to_show)
+				$values_to_return[$index]['tag_name'] = $data[0];
+			else
+				$values_to_return[$index]['tag_name'] = $data[0] . ": " . $data[1];
+
 			$values_to_return[$index]['color'] = $colors[$index];
 			$values_to_return[$index]['value'] = (int)$data[1];
 			$total += (int)$data[1];
@@ -3154,14 +3189,18 @@ function visual_map_get_status_element($layoutData) {
 					$module_status = db_get_sql ('SELECT estado
 						FROM tagente_estado
 						WHERE id_agente_modulo = ' . $layoutData['id_agente_modulo']);
+					
 					switch($module_status) {
 						case AGENT_STATUS_NORMAL:
+						case AGENT_MODULE_STATUS_NORMAL_ALERT:
 							$layoutData['status_calculated'] = VISUAL_MAP_STATUS_NORMAL;
 							break;
 						case AGENT_MODULE_STATUS_WARNING:
+						case AGENT_MODULE_STATUS_WARNING_ALERT:
 							$layoutData['status_calculated'] = VISUAL_MAP_STATUS_WARNING;
 							break;
 						case AGENT_STATUS_CRITICAL:
+						case AGENT_MODULE_STATUS_CRITICAL_ALERT:
 							$layoutData['status_calculated'] = VISUAL_MAP_STATUS_CRITICAL_BAD;
 							break;
 						case AGENT_MODULE_STATUS_NO_DATA:
@@ -4047,5 +4086,6 @@ function visual_map_macro($label,$module){
 	$label = str_replace('_moduledescription_',modules_get_agentmodule_descripcion($module),$label);
 	return $label;
 }
+
 
 ?>

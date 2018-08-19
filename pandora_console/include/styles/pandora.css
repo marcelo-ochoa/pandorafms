@@ -3596,7 +3596,6 @@ div.simple_value > a > span.text p
 	position:fixed;
 	width:750px;
 	max-width:750px;
-	min-width:750px;
 	top: 20%;
 	background:white;
 }
@@ -4618,10 +4617,6 @@ form ul.form_flex li ul li{
     flex-direction: column;
 }
 
-.events_bar {
-	margin:0 auto;
-}
-
 #snmp_data {
 	background: #f9faf9;
 }
@@ -4629,13 +4624,11 @@ form ul.form_flex li ul li{
 	border: 0px;
 }
 
-/*
 .yAxis.y1Axis > .tickLabel {
     white-space: nowrap;
     line-height: 1.05em!important;
     width: auto!important;
 }
-*/
 
 .pandora_confirm_dialog .ui-dialog-buttonset {
     display: flex;
@@ -4664,4 +4657,21 @@ form ul.form_flex li ul li{
 
 .dialog-grayed .ui-dialog-buttonpane {
 	background: #373737 !important;
+}
+
+a.down_arrow {
+	content: url("../../images/down.png");
+	max-width: 21px;
+	max-height: 21px;
+}
+
+a.up_arrow {
+	content: url("../../images/down.png");
+	transform: rotate(180deg);
+	max-width: 21px;
+	max-height: 21px;
+}
+
+tr:last-child > td > a.down_arrow, tr:first-child > td > a.up_arrow {
+	visibility: hidden;
 }

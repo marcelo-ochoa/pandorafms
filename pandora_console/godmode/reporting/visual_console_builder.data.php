@@ -126,18 +126,10 @@ else {
 }
 	
 $table->data[1][0] = __('Group:');
-$groups = users_get_groups ($config['id_user'], 'RW');
 
-$own_info = get_user_info($config['id_user']);
-// Only display group "All" if user is administrator
-// or has "RW" privileges
-if ($own_info['is_admin'] || $vconsole_write || $vconsole_manage)
-	$display_all_group = true;
-else
-	$display_all_group = false;
 
 $table->data[1][1] = html_print_select_groups($config['id_user'], "RW",
-	$display_all_group, 'id_group', $idGroup, '', '', '', true);
+	true, 'id_group', $idGroup, '', '', '', true);
 $backgrounds_list = list_files(
 	$config['homedir'] . '/images/console/background/', "jpg", 1, 0);
 $backgrounds_list = array_merge($backgrounds_list,

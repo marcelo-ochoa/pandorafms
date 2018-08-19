@@ -1,7 +1,7 @@
 #############################################################################
 # Pandora FMS Server Parameters
 # Pandora FMS, the Flexible Monitoring System.
-# Version 7.0NG.724
+# Version 7.0NG.726
 # Licensed under GPL license v2,
 # (c) 2003-2017 Artica Soluciones Tecnologicas
 # http://www.pandorafms.com
@@ -342,18 +342,9 @@ restart_delay 60
 
 #location_error 50
 
-# Recon reverse geolocation mode [disabled, sql, file]
-#   disabled    The recon task doesn't try to geolocate the ip discovered.
-#   sql         The recon task trys to query the SQL database to geolocate the 
-#               ip discovered
-#   file        The recon task trys to find the geolocation information of the 
-#               ip discovered in the file indicated in the 
-#                recon_reverse_geolocation_file parameter 
-
-# recon_reverse_geolocation_mode disabled
-
 # Recon reverse geolocation file. This is the database with the reverse 
 # geolocation information using MaxMind GPL GeoLiteCity.dat format).
+# Comment it to disable the IP geolocation on agent creation.
 
 #recon_reverse_geolocation_file /usr/local/share/GeoIP/GeoIPCity.dat
 
@@ -629,4 +620,10 @@ syslog_max 65535
 # Target LogStash server, to allow Dataserver and SyslogServer store log information in ElasticSearch
 #logstash_host ip
 #logstash_port 10514
+
+# Pandora FMS Database HA Tool execution interval in seconds (PANDORA FMS ENTERPRISE ONLY).
+ha_interval 30
+
+# Pandora FMS Database HA Tool monitoring interval in seconds. Must be a multiple of ha_interval (PANDORA FMS ENTERPRISE ONLY).
+ha_monitoring_interval 60
 

@@ -43,7 +43,7 @@ function config_create_value ($token, $value) {
  */
 function config_update_value ($token, $value) {
 	global $config;
-	
+	$config['flash_charts'] = true;
 	// Include functions_io to can call __() function
 	include_once($config['homedir'] . '/include/functions_io.php');
 	
@@ -628,6 +628,15 @@ function config_update_config () {
 					if (!config_update_value ('full_scale_option', (int) get_parameter('full_scale_option', 0)))
 						$error_update[] = __('Default full scale (TIP)');
 
+					if (!config_update_value ('type_mode_graph', (int) get_parameter('type_mode_graph', 0)))
+						$error_update[] = __('Default soft graphs');
+
+					if (!config_update_value ('zoom_graph', (int) get_parameter('zoom_graph', 0)))
+						$error_update[] = __('Default zoom graphs');
+
+					if (!config_update_value ('graph_image_height', (int) get_parameter('graph_image_height', 0)))
+						$error_update[] = __('Default height of the chart image');
+
 					if (!config_update_value ('classic_menu', (bool) get_parameter('classic_menu', false)))
 						$error_update[] = __('Classic menu mode');
 
@@ -864,7 +873,7 @@ function config_process_config () {
 
 	if (!isset ($config['phantomjs_bin'])) {
 		if ($is_windows){
-			$default = 'C:\\PandoraFMS\\Pandora_Server\\data_in';
+			$default = 'C:\\PandoraFMS\\phantomjs';
 		}
 		else{
 			$default = '/usr/bin';
@@ -1851,6 +1860,10 @@ function config_process_config () {
 		config_update_value ('render_proc', 0);
 	}
 	
+	if (!isset($config['graph_image_height'])) {
+		config_update_value ('graph_image_height', 320);
+	}
+	
 	if (!isset($config["render_proc_ok"])) {
 		config_update_value ('render_proc_ok', __('Ok') );
 	}
@@ -2192,11 +2205,18 @@ function config_check () {
 	}
 
 	$result_ejecution = exec($config['phantomjs_bin'] . '/phantomjs --version');
-	if(!isset($result_ejecution) || $result_ejecution == ''){
-		set_pandora_error_for_header(
-			__('To be able to create images of the graphs for PDFs, please install the phantom.js extension. For that, it is necessary to follow these steps:') .
-			'<a src="">Click here</a>',
-			__("phantomjs is not installed"));
+	if(!isset($result_ejecution) || $result_ejecution == '') {
+		if ($config['language'] == 'es') {
+			set_pandora_error_for_header(
+				__('To be able to create images of the graphs for PDFs, please install the phantom.js extension. For that, it is necessary to follow these steps:') .
+				'<a target="blank" href="https://wiki.pandorafms.com/index.php?title=Pandora:Documentation_es:Configuracion#Phantomjs">Click here</a>',
+				__("phantomjs is not installed"));
+		} else {
+			set_pandora_error_for_header(
+				__('To be able to create images of the graphs for PDFs, please install the phantom.js extension. For that, it is necessary to follow these steps:') .
+				'<a target="blank" href="https://wiki.pandorafms.com/index.php?title=Pandora:Documentation_en:Configuration#Phantomjs">Click here</a>',
+				__("phantomjs is not installed"));
+		}
 	}
 }
 
@@ -2273,5 +2293,20 @@ function config_prepare_session() {
 	
 	ini_set("post_max_size", $config["max_file_size"]);
 	ini_set("upload_max_filesize", $config["max_file_size"]);
+}
+
+function config_update_value_in_db ($token, $value) {
+	$inserted_value = db_get_value('value', 'tconfig', '`token`', $token);
+	if ($inserted_value === false) {
+		return db_process_sql_insert(
+			'tconfig',
+			array('value' => $value, 'token' => $token)
+		) !== false;
+	}
+	else {
+		return db_process_sql_update(
+			'tconfig', array('value' => $value), array('token' => $token)
+		) !== false;
+	}
 }
 ?>

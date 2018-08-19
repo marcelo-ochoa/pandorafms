@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS `tagente` (
 	`transactional_agent` tinyint(1) NOT NULL default '0',
 	`alias_as_name` tinyint(2) NOT NULL default '0',
 	`safe_mode_module` int(10) unsigned NOT NULL default '0',
+	`cps` int NOT NULL default 0,
 	PRIMARY KEY  (`id_agente`),
 	KEY `nombre` (`nombre`(255)),
 	KEY `direccion` (`direccion`),
@@ -259,6 +260,7 @@ CREATE TABLE IF NOT EXISTS `tagente_modulo` (
 	`prediction_samples` int(4) default 0,
 	`prediction_threshold` int(4) default 0,
 	`parent_module_id` int(10) unsigned NOT NULL,
+	`cps` int NOT NULL default 0,
 	PRIMARY KEY  (`id_agente_modulo`),
 	KEY `main_idx` (`id_agente_modulo`,`id_agente`),
 	KEY `tam_agente` (`id_agente`),
@@ -639,6 +641,8 @@ CREATE TABLE IF NOT EXISTS `tevento` (
 	`owner_user` VARCHAR(100) NOT NULL DEFAULT '',
 	`ack_utimestamp` BIGINT(20) NOT NULL DEFAULT '0',
 	`custom_data` TEXT NOT NULL,
+	`data` double(22,5) default NULL,
+	`module_status` int(4) NOT NULL default '0',
 	PRIMARY KEY  (`id_evento`),
 	KEY `idx_agente` (`id_agente`),
 	KEY `idx_agentmodule` (`id_agentmodule`),
@@ -1132,7 +1136,7 @@ CREATE TABLE IF NOT EXISTS `tusuario_perfil` (
 	`id_usuario` varchar(100) NOT NULL default '',
 	`id_perfil` int(10) unsigned NOT NULL default '0',
 	`id_grupo` int(10) NOT NULL default '0',
-	`is_secondary` tinyint(1) NOT NULL default 0,
+	`no_hierarchy` tinyint(1) NOT NULL default 0,
 	`assigned_by` varchar(100) NOT NULL default '',
 	`id_policy` int(10) unsigned NOT NULL default '0',
 	`tags` text NOT NULL,
@@ -1665,6 +1669,25 @@ CREATE  TABLE IF NOT EXISTS `tgis_map_layer_has_tagente` (
 ENGINE = InnoDB
 COMMENT = 'Table to define wich agents are shown in a layer';
 
+-- -----------------------------------------------------
+-- Table `tgis_map_layer_groups`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tgis_map_layer_groups` (
+	`layer_id` INT NOT NULL,
+	`group_id` MEDIUMINT(4) UNSIGNED NOT NULL,
+	`agent_id` INT(10) UNSIGNED NOT NULL COMMENT 'Used to link the position to the group',
+	PRIMARY KEY (`layer_id`, `group_id`),
+	FOREIGN KEY (`layer_id`)
+		REFERENCES `tgis_map_layer` (`id_tmap_layer`)
+		ON DELETE CASCADE,
+	FOREIGN KEY (`group_id`)
+		REFERENCES `tgrupo` (`id_grupo`)
+		ON DELETE CASCADE,
+	FOREIGN KEY (`agent_id`)
+		REFERENCES `tagente` (`id_agente`)
+		ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 -- ----------------------------------------------------------------------
 -- Table `tgroup_stat`
 -- ----------------------------------------------------------------------
@@ -2156,6 +2179,7 @@ CREATE TABLE IF NOT EXISTS `tpolicy_modules` (
 	`prediction_sample_window` int(10) default 0,
 	`prediction_samples` int(4) default 0,
 	`prediction_threshold` int(4) default 0,
+	`cps` int NOT NULL DEFAULT 0,
 	PRIMARY KEY  (`id`),
 	KEY `main_idx` (`id_policy`),
 	UNIQUE (`id_policy`, `name`)
@@ -2203,8 +2227,9 @@ CREATE TABLE IF NOT EXISTS `tpolicy_agents` (
 	`policy_applied` tinyint(1) unsigned default '0',
 	`pending_delete` tinyint(1) unsigned default '0',
 	`last_apply_utimestamp` int(10) unsigned NOT NULL default 0,
+	`id_node` int(10) NOT NULL default 0,
 	PRIMARY KEY  (`id`),
-	UNIQUE (`id_policy`, `id_agent`)
+	UNIQUE (`id_policy`, `id_agent`, `id_node`)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;
 
 -- -----------------------------------------------------
@@ -2312,6 +2337,7 @@ CREATE TABLE IF NOT EXISTS `tagent_module_inventory` (
 	`utimestamp` bigint(20) default '0',
 	`flag` tinyint(1) unsigned default '1',
 	`id_policy_module_inventory` int(10) NOT NULL default '0',
+	`custom_fields` MEDIUMBLOB NOT NULL,
 	PRIMARY KEY  (`id_agent_module_inventory`),
 	FOREIGN KEY (`id_agente`) REFERENCES tagente(`id_agente`)
 		ON UPDATE CASCADE ON DELETE CASCADE,
@@ -2423,6 +2449,10 @@ CREATE TABLE IF NOT EXISTS `tservice` (
 	`id_template_alert_critical` int(10) unsigned NOT NULL default 0,
 	`id_template_alert_unknown` int(10) unsigned NOT NULL default 0,
 	`id_template_alert_critical_sla` int(10) unsigned NOT NULL default 0,
+	`quiet` tinyint(1) NOT NULL default 0,
+	`cps` int NOT NULL default 0,
+	`cascade_protection` tinyint(1) NOT NULL default 0,
+	`evaluate_sla` int(1) NOT NULL default 0,
 	PRIMARY KEY  (`id`)
 ) ENGINE=InnoDB 
 COMMENT = 'Table to define services to monitor' 
@@ -2869,6 +2899,8 @@ CREATE TABLE IF NOT EXISTS `tmetaconsole_event` (
 	`ack_utimestamp` BIGINT(20) NOT NULL DEFAULT '0',
 	`server_id` int(10) NOT NULL,
 	`custom_data` TEXT NOT NULL DEFAULT '',
+	`data` double(22,5) default NULL,
+	`module_status` int(4) NOT NULL default '0',
 	PRIMARY KEY  (`id_evento`),
 	KEY `idx_agente` (`id_agente`),
 	KEY `idx_agentmodule` (`id_agentmodule`),
@@ -2914,6 +2946,8 @@ CREATE TABLE IF NOT EXISTS `tmetaconsole_event_history` (
 	`ack_utimestamp` BIGINT(20) NOT NULL DEFAULT '0',
 	`server_id` int(10) NOT NULL,
 	`custom_data` TEXT NOT NULL DEFAULT '',
+	`data` double(22,5) default NULL,
+	`module_status` int(4) NOT NULL default '0',
 	PRIMARY KEY  (`id_evento`),
 	KEY `idx_agente` (`id_agente`),
 	KEY `idx_agentmodule` (`id_agentmodule`),
@@ -3004,6 +3038,7 @@ CREATE TABLE IF NOT EXISTS `tmetaconsole_agent` (
 	`alias` varchar(600) BINARY NOT NULL default '',
 	`alias_as_name` tinyint(2) NOT NULL default '0',
 	`safe_mode_module` int(10) unsigned NOT NULL default '0',
+	`cps` int NOT NULL default 0,
 	PRIMARY KEY  (`id_agente`),
 	KEY `nombre` (`nombre`(255)),
 	KEY `direccion` (`direccion`),
@@ -3188,3 +3223,97 @@ create table IF NOT EXISTS `tmetaconsole_agent_secondary_group`(
 		ON DELETE CASCADE
 ) engine=InnoDB DEFAULT CHARSET=utf8;
 
+-- ---------------------------------------------------------------------
+-- Table `tautoconfig`
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tautoconfig` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `order` int(11) NOT NULL DEFAULT '0',
+  `description` text,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- ---------------------------------------------------------------------
+-- Table `tautoconfig_rules`
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tautoconfig_rules` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `id_autoconfig` int(10) unsigned NOT NULL,
+  `order` int(11) NOT NULL DEFAULT '0',
+  `operator` enum('AND','OR') DEFAULT 'OR',
+  `type` enum('alias','ip-range','group','os','custom-field','script','server-name') DEFAULT 'alias',
+  `value` text,
+  `custom` text,
+  PRIMARY KEY (`id`),
+  KEY `id_autoconfig` (`id_autoconfig`),
+  CONSTRAINT `tautoconfig_rules_ibfk_1` FOREIGN KEY (`id_autoconfig`) REFERENCES `tautoconfig` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- ---------------------------------------------------------------------
+-- Table `tautoconfig_actions`
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tautoconfig_actions` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `id_autoconfig` int(10) unsigned NOT NULL,
+  `order` int(11) NOT NULL DEFAULT '0',
+  `action_type` enum('set-group', 'set-secondary-group', 'apply-policy', 'launch-script', 'launch-event', 'launch-alert-action', 'raw-config') DEFAULT 'launch-event',
+  `value` text,
+  `custom` text,
+  PRIMARY KEY (`id`),
+  KEY `id_autoconfig` (`id_autoconfig`),
+  CONSTRAINT `tautoconfig_action_ibfk_1` FOREIGN KEY (`id_autoconfig`) REFERENCES `tautoconfig` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- ---------------------------------------------------------------------
+-- Table `tlayout_template`
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tlayout_template` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+	`name` varchar(50)  NOT NULL,
+	`id_group` INTEGER UNSIGNED NOT NULL,
+	`background` varchar(200)  NOT NULL,
+	`height` INTEGER UNSIGNED NOT NULL default 0,
+	`width` INTEGER UNSIGNED NOT NULL default 0,
+	`background_color` varchar(50) NOT NULL default '#FFF',
+	`is_favourite` INTEGER UNSIGNED NOT NULL default 0,
+	PRIMARY KEY(`id`)
+)  ENGINE = InnoDB DEFAULT CHARSET=utf8;
+
+-- ---------------------------------------------------------------------
+-- Table `tlayout_template_data`
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tlayout_template_data` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+	`id_layout_template` INTEGER UNSIGNED NOT NULL,
+	`pos_x` INTEGER UNSIGNED NOT NULL default 0,
+	`pos_y` INTEGER UNSIGNED NOT NULL default 0,
+	`height` INTEGER UNSIGNED NOT NULL default 0,
+	`width` INTEGER UNSIGNED NOT NULL default 0,
+	`label` TEXT,
+	`image` varchar(200) DEFAULT "",
+	`type` tinyint(1) UNSIGNED NOT NULL default 0,
+	`period` INTEGER UNSIGNED NOT NULL default 3600,
+	`module_name` text NOT NULL,
+	`agent_name` varchar(600) BINARY NOT NULL default '',
+	`id_layout_linked` INTEGER unsigned NOT NULL default '0',
+	`parent_item` INTEGER UNSIGNED NOT NULL default 0,
+	`enable_link` tinyint(1) UNSIGNED NOT NULL default 1,
+	`id_metaconsole` int(10) NOT NULL default 0,
+	`id_group` INTEGER UNSIGNED NOT NULL default 0,
+	`id_custom_graph` INTEGER UNSIGNED NOT NULL default 0,
+	`border_width` INTEGER UNSIGNED NOT NULL default 0,
+	`type_graph` varchar(50) NOT NULL default 'area',
+	`label_position` varchar(50) NOT NULL default 'down',
+	`border_color` varchar(200) DEFAULT "",
+	`fill_color` varchar(200) DEFAULT "",
+	`show_statistics` tinyint(2) NOT NULL default '0',
+	`id_layout_linked_weight` int(10) NOT NULL default '0',
+	`element_group` int(10) NOT NULL default '0',
+	`show_on_top` tinyint(1) NOT NULL default '0',
+	`clock_animation` varchar(60) NOT NULL default "analogic_1",
+	`time_format` varchar(60) NOT NULL default "time",
+	`timezone` varchar(60) NOT NULL default "Europe/Madrid",
+	PRIMARY KEY(`id`),
+	FOREIGN KEY (`id_layout_template`) REFERENCES tlayout_template(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET=utf8;

@@ -43,11 +43,11 @@ if ($id_group > 0) {
 else {
 	$childrens_ids = array_keys($groups);
 }
-
 //Group selection
 if ($id_group > 0 && in_array ($id_group, array_keys ($groups))) {
 	if ($propagate) {
-		$sql_post = " AND id_grupo IN (" . implode(',', $childrens_ids) . ")";
+		$childrens_str = implode(',', $childrens_ids);
+		$sql_post = " AND (id_grupo IN ($childrens_str) OR id_group IN ($childrens_str))";
 	}
 	else {
 		//If a group is selected and it's in the groups allowed
@@ -81,6 +81,7 @@ switch ($status) {
 $events_wi_cdata = db_get_all_rows_sql('SELECT id_evento,custom_data from tevento WHERE custom_data != ""');
 $count_events = 0;
 $events_wi_cdata_id = 'OR id_evento IN (';
+if ($events_wi_cdata === false) $events_wi_cdata = array();
 foreach ($events_wi_cdata as $key => $value) {
 	$needle = base64_decode($value['custom_data']);
 	if (($needle != "") && ($search != "")) {

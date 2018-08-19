@@ -137,14 +137,25 @@ function flot_area_graph (
 	$return = "<div class='parent_graph' style='width: " . ($params['width']) . ";" . $background_style . "'>";
 	// Set some containers to legend, graph, timestamp tooltip, etc.
 	if($params['show_legend']){
-		$return .= "<p id='legend_$graph_id' class='legend_graph' style='font-size:" . $params['font_size'] ."pt !important;'></p>";
+		$return .= "<p id='legend_$graph_id'></p>";
 	}
 	if(isset($params['graph_combined']) && $params['graph_combined'] &&
 		(!isset($params['from_interface']) || !$params['from_interface']) ){
-		$yellow_up      = 0;
-		$red_up         = 0;
-		$yellow_inverse = false;
-		$red_inverse    = false;
+		if(	isset($params['threshold_data']) && is_array($params['threshold_data'])){
+			$yellow_threshold = $params['threshold_data']['yellow_threshold'];
+			$red_threshold    = $params['threshold_data']['red_threshold'];
+			$yellow_up        = $params['threshold_data']['yellow_up'];
+			$red_up           = $params['threshold_data']['red_up'];
+			$yellow_inverse   = $params['threshold_data']['yellow_inverse'];
+			$red_inverse      = $params['threshold_data']['red_inverse'];
+		}
+		else{
+			$yellow_up      = 0;
+			$red_up         = 0;
+			$yellow_inverse = false;
+			$red_inverse    = false;
+		}
+		
 	}
 	elseif(!isset($params['combined']) || !$params['combined']){
 		$yellow_threshold = $data_module_graph['w_min'];
@@ -164,10 +175,12 @@ function flot_area_graph (
 	}
 	elseif(isset($params['from_interface']) && $params['from_interface']){
 		if(	isset($params['threshold_data']) && is_array($params['threshold_data'])){
-			$yellow_up      = $params['threshold_data']['yellow_up'];
-			$red_up         = $params['threshold_data']['red_up'];
-			$yellow_inverse = $params['threshold_data']['yellow_inverse'];
-			$red_inverse    = $params['threshold_data']['red_inverse'];
+			$yellow_threshold = $params['threshold_data']['yellow_threshold'];
+			$red_threshold    = $params['threshold_data']['red_threshold'];
+			$yellow_up        = $params['threshold_data']['yellow_up'];
+			$red_up           = $params['threshold_data']['red_up'];
+			$yellow_inverse   = $params['threshold_data']['yellow_inverse'];
+			$red_inverse      = $params['threshold_data']['red_inverse'];
 		}
 		else{
 			$yellow_up      = 0;
@@ -222,7 +235,7 @@ function flot_area_graph (
 
 	if (!$vconsole){
 		$return .= "<div id='overview_$graph_id' class='overview_graph'
-						style='margin:0px; margin-top:30px; margin-bottom:50px; display:none; width: ".$params['width']."; height: 200px;'></div>";
+						style='margin:0px; margin-top:30px; margin-bottom:50px; width: ".$params['width']."; height: 200px;'></div>";
 	}
 
 	if ($water_mark != '') {
@@ -249,11 +262,6 @@ function flot_area_graph (
 
 	// Trick to get translated string from javascript
 	$return .= html_print_input_hidden('unknown_text', __('Unknown'), true);
-
-//XXXX Meter en params
-/*
-	mirar tmb lo de force integer
-*/
 
 	$values              = json_encode($array_data);
 	$legend              = json_encode($legend);

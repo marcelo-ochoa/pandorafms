@@ -24,14 +24,15 @@ use Scalar::Util qw(looks_like_number);
 use Time::HiRes qw(time);
 use POSIX qw(strftime setsid floor);
 use MIME::Base64;
+use JSON qw(decode_json encode_json);
 
 use base 'Exporter';
 
 our @ISA = qw(Exporter);
 
 # version: Defines actual version of Pandora Server for this module only
-my $pandora_version = "7.0NG.724";
-my $pandora_build = "180613";
+my $pandora_version = "7.0NG.726";
+my $pandora_build = "180819";
 our $VERSION = $pandora_version." ".$pandora_build;
 
 our %EXPORT_TAGS = ( 'all' => [ qw() ] );
@@ -45,6 +46,7 @@ our @EXPORT = qw(
 	api_create_tag
 	api_create_group
 	call_url
+	check_lib_version
 	decrypt
 	empty
 	encrypt
@@ -62,6 +64,7 @@ our @EXPORT = qw(
 	in_array
 	init
 	is_enabled
+	join_by_field
 	load_perl_modules
 	logger
 	merge_hashes
@@ -93,12 +96,34 @@ our @EXPORT = qw(
 my $DevNull = ($^O =~ /win/i)?'/NUL':'/dev/null';
 
 ################################################################################
-#
+# Returns current library version
 ################################################################################
 sub get_lib_version {
 	return $VERSION;
 }
 
+################################################################################
+# Check version compatibility
+################################################################################
+sub check_lib_version {
+	my ($plugin_version) = @_;
+
+	$plugin_version = "0NG.0" if empty($plugin_version);
+
+	my ($main,$oum) = split /NG./, $plugin_version;
+
+	$main = 0 if empty($main) || !looks_like_number($main);
+	$oum  = 0 if empty($oum)  || !looks_like_number($oum);
+
+	my ($libmain,$liboum) = split /NG./, $pandora_version;
+
+	if (($liboum < $oum)
+	||  ($libmain != $main)) {
+		return 0;
+	}
+
+	return 1;
+}
 
 ################################################################################
 # Get current time (milis)
@@ -436,9 +461,7 @@ sub print_agent {
 # print_module
 ################################################################################
 sub print_module {
-	my $conf = shift;
-	my $data = shift;
-	my $not_print_flag = shift;
+	my ($conf, $data, $not_print_flag) = @_;
 
 	if ((ref($data) ne "HASH") || (!defined $data->{name})) {
 		return undef;
@@ -451,9 +474,21 @@ sub print_module {
 	}
 
 	$data->{value} = '' if empty($data->{value});
-	$data->{tags}  = $data->{tags}?$data->{tags}:($conf->{MODULE_TAG_LIST}?$conf->{MODULE_TAG_LIST}:undef);
-	$data->{interval}     = $data->{interval}?$data->{interval}:($conf->{MODULE_INTERVAL}?$conf->{MODULE_INTERVAL}:undef);
-	$data->{module_group} = $data->{module_group}?$data->{module_group}:($conf->{MODULE_GROUP}?$conf->{MODULE_GROUP}:undef);
+
+	$data->{tags} = ($data->{tags} ?
+		$data->{tags} : ($conf->{MODULE_TAG_LIST} ?
+			$conf->{MODULE_TAG_LIST} : ($conf->{module_tag_list} ? 
+				$conf->{module_tag_list} : undef)));
+
+	$data->{interval} = ($data->{interval} ? 
+		$data->{interval} : ($conf->{MODULE_INTERVAL} ?
+			$conf->{MODULE_INTERVAL} : ($conf->{module_interval} ? 
+				$conf->{module_interval} : undef)));
+
+	$data->{module_group} = ($data->{module_group} ? 
+		$data->{module_group} : ($conf->{MODULE_GROUP} ? 
+			$conf->{MODULE_GROUP} : ( $conf->{module_group} ?
+				$conf->{module_group} : undef)));
 	
 
 	# Global instructions (if defined)
@@ -677,7 +712,8 @@ sub transfer_xml {
 
 	# Reassign default values if not present
 	$conf->{tentacle_client} = "tentacle_client" if empty($conf->{tentacle_client});
-	$conf->{tentacle_port}   = "44121"     if empty($conf->{tentacle_port});
+	$conf->{tentacle_port}   = "41121"     if empty($conf->{tentacle_port});
+	$conf->{tentacle_opts}   = ""          if empty($conf->{tentacle_opts});
 	$conf->{mode} = $conf->{transfer_mode} if empty($conf->{mode});
 
 	if (empty ($conf->{mode}) ) {
@@ -687,26 +723,30 @@ sub transfer_xml {
 
 	#Transfering XML file
 	if ($conf->{mode} eq "tentacle") {
-
+		my $msg = "";
+		my $r = -1;
 		#Send using tentacle
 		if ($^O =~ /win/i) {
-			`$conf->{tentacle_client} -v -a $conf->{tentacle_ip} -p $conf->{tentacle_port} $conf->{tentacle_opts} "$file_path"`;
+			$msg = `$conf->{tentacle_client} -v -a $conf->{tentacle_ip} -p $conf->{tentacle_port} $conf->{tentacle_opts} "$file_path"`;
+			$r = $?;
 		}
 		else {
-			`$conf->{tentacle_client} -v -a $conf->{tentacle_ip} -p $conf->{tentacle_port} $conf->{tentacle_opts} "$file_path" 2>&1 > /dev/null`;
+			$msg = `$conf->{tentacle_client} -v -a $conf->{tentacle_ip} -p $conf->{tentacle_port} $conf->{tentacle_opts} "$file_path" 2>&1`;
+			$r = $?;
 		}
 			
 			
 		#If no errors were detected delete file	
 		
-		if (! $?) {
+		if ($r == 0) {
 			unlink ($file_path);
-			} else {
-				print_stderror($conf, "[ERROR] There was a problem sending file [$file_path] using tentacle");
-				return undef;
-			}	
-		} 
+		}
 		else {
+			print_stderror($conf, trim($msg) . " File [$file_path]");
+			return undef;
+		}	
+	} 
+	else {
 		#Copy file to local folder
 		my $dest_dir = $conf->{local_folder};
 
@@ -961,6 +1001,18 @@ sub init {
 }
 
 ################################################################################
+# Update internal UA timeout
+################################################################################
+sub ua_set_timeout {
+	my ($config, $timeout) = @_;
+	return unless looks_like_number($timeout) and $timeout > 0;
+	my $sys = get_sys_environment($config);
+
+	return unless defined($sys->{'ua'});
+	$sys->{'ua'}->timeout($timeout);
+}
+
+################################################################################
 # initialize plugin (basic)
 ################################################################################
 sub init_system {
@@ -1001,6 +1053,22 @@ sub init_system {
 
 	$conf->{'__system'} = \%system;
 	return $conf;
+}
+
+################################################################################
+# Return a string with the concatenation of a hash array based on a field
+################################################################################
+sub join_by_field {
+	my ($separator, $field, $array_hashref) = @_;
+
+	$separator = ',' if empty($separator);
+	my $str = '';
+	foreach my $item (@{$array_hashref}) {
+		$str .= (defined($item->{$field})?$item->{$field}:'') . $separator;
+	}
+	chop($str);
+
+	return $str;
 }
 
 ################################################################################
@@ -1391,7 +1459,7 @@ sub process_performance {
 
 		$instances = trim (head(`$_PluginTools_system->{ps} | $_PluginTools_system->{grep} "$process"| $_PluginTools_system->{wcl}`, 1));
 
-    }
+	}
 	elsif ($^O =~ /linux/i ){
 		$cpu = trim(`$_PluginTools_system->{ps} | $_PluginTools_system->{grep} -w "$process" | $_PluginTools_system->{grep} -v grep | awk 'BEGIN {sum=0} {sum+=\$2} END{print sum}'`);
 		$mem = trim(`$_PluginTools_system->{ps} | $_PluginTools_system->{grep} -w "$process" | $_PluginTools_system->{grep} -v grep | awk 'BEGIN {sum=0} {sum+=\$1} END{print sum}'`);
@@ -1500,14 +1568,14 @@ sub api_available {
 # apidata->{other} = [field1,field2,...,fieldi,...,fieldn]
 #########################################################################################
 sub api_call {
-	my ($conf, $apidata) = @_;
+	my ($conf, $apidata, $decode_json) = @_;
 	my ($api_url, $api_pass, $api_user, $api_user_pass,
-	 	 $op, $op2, $other_mode, $other, $return_type);
+	 	 $op, $op2, $id, $id2, $other_mode, $other, $return_type);
 	my $separator;
 
 	if (ref $apidata eq "ARRAY") {
 	 	($api_url, $api_pass, $api_user, $api_user_pass,
-	 	 $op, $op2, $return_type, $other_mode, $other) = @{$apidata};
+	 	 $op, $op2, $id, $id2, $return_type, $other_mode, $other) = @{$apidata};
 	}
 	if (ref $apidata eq "HASH") {
 		$api_url       = $apidata->{'api_url'};
@@ -1516,6 +1584,8 @@ sub api_call {
 		$api_user_pass = $apidata->{'api_user_pass'};
 		$op            = $apidata->{'op'};
 		$op2           = $apidata->{'op2'};
+		$id            = $apidata->{'id'};
+		$id2           = $apidata->{'id2'};
 		$return_type   = $apidata->{'return_type'};
 		$other_mode    = "url_encode_separator_" . $apidata->{'url_encode_separator'} unless empty($apidata->{'url_encode_separator'});
 		$other_mode    = "url_encode_separator_|" if empty($other_mode);
@@ -1528,6 +1598,8 @@ sub api_call {
 	$api_user_pass = $conf->{'api_user_pass'} if empty($api_user_pass);
 	$op            = $conf->{'op'}            if empty($op);
 	$op2           = $conf->{'op2'}           if empty($op2);
+	$id            = $conf->{'id'}            if empty($id);
+	$id2           = $conf->{'id2'}           if empty($id2);
 	$return_type   = $conf->{'return_type'}   if empty($return_type);
 	$return_type   = 'json'                   if empty($return_type);
 	if (ref ($apidata->{'other'}) eq "ARRAY") {
@@ -1545,18 +1617,30 @@ sub api_call {
 		$other = $apidata->{'other'};
 	}
 
+	$other = '' if empty($other);
+	$id    = '' if empty($id); 
+	$id2   = '' if empty($id2);
+
 	my $call;
 
 	$call = $api_url . '?';
-	$call .= 'op=' . $op . '&op2=' . $op2;
+	$call .= 'op=' . $op . '&op2=' . $op2 . '&id=' . $id;
 	$call .= '&other_mode=url_encode_separator_' . $separator;
 	$call .= '&other=' . $other;
 	$call .= '&apipass=' . $api_pass . '&user=' . $api_user . '&pass=' . $api_user_pass;
 	$call .= '&return_type=' . $return_type;
 
 	my $rs = call_url($conf, "$call");
-
 	if (ref($rs) ne "HASH") {
+		if (is_enabled($decode_json)) {
+			eval {
+				my $tmp = decode_json($rs);
+				$rs = $tmp;
+			};
+			if ($@) {
+				print_stderror($conf, "Error: " . $@);
+			}
+		}
 		return {
 			rs => (empty($rs)?1:0),
 			error => (empty($rs)?"Empty response.":undef),
@@ -1800,13 +1884,13 @@ sub api_create_group {
 # 	$snmp{host}
 # 	$snmp{oid}
 # 	$snmp{port}
-#   $snmp{securityName}
-#   $snmp{context
-#   $snmp{securityLevel}
-#   $snmp{authProtocol}
-#   $snmp{authKey}
-#   $snmp{privProtocol}
-#   $snmp{privKey}
+#	$snmp{securityName}
+#	$snmp{context
+#	$snmp{securityLevel}
+#	$snmp{authProtocol}
+#	$snmp{authKey}
+#	$snmp{privProtocol}
+#	$snmp{privKey}
 ################################################################################
 sub snmp_walk {
 	my $snmp = shift;
@@ -1906,13 +1990,13 @@ sub snmp_walk {
 # 	$snmp{host}
 # 	$snmp{oid}
 # 	$snmp{port}
-#   $snmp{securityName}
-#   $snmp{context
-#   $snmp{securityLevel}
-#   $snmp{authProtocol}
-#   $snmp{authKey}
-#   $snmp{privProtocol}
-#   $snmp{privKey}
+#	$snmp{securityName}
+#	$snmp{context
+#	$snmp{securityLevel}
+#	$snmp{authProtocol}
+#	$snmp{authKey}
+#	$snmp{privProtocol}
+#	$snmp{privKey}
 ################################################################################
 sub snmp_get {
 	my $snmp = shift;

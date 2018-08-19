@@ -54,6 +54,7 @@ $no_login_msg = "";
 // Clean unwanted output
 ob_clean();
 
+// READ THIS:
 // Special call without checks to retrieve version and build of the Pandora FMS
 // This info is avalable from the web console without login
 // Don't change the format, it is parsed by applications
@@ -63,7 +64,7 @@ switch($info) {
 			$config["MR"] = 0;
 		}
 		
-		echo get_product_name() . ' ' . $pandora_version . ' - ' . $build_version . " MR" . $config["MR"];
+		echo 'Pandora FMS ' . $pandora_version . ' - ' . $build_version . " MR" . $config["MR"];
 
 		exit;
 }
@@ -75,6 +76,14 @@ if (isInACL($ipOrigin)) {
 		if ($user_in_db !== false) {
 			$config['id_user'] = $user_in_db;
 			$correctLogin = true;
+			
+			//XXXX
+			session_start();
+			$_SESSION["id_usuario"] = $user;
+			session_write_close();
+
+			file_put_contents(session_save_path() . DIRECTORY_SEPARATOR . "pansess_" . session_id(), $user);
+
 		}
 		else {
 			$no_login_msg = "Incorrect user credentials";
@@ -176,6 +185,11 @@ if ($correctLogin) {
 		else {
 			returnError('no_exist_operation', $returnType);
 		}
+	}
+
+	//XXXXX
+	if (file_exists(session_save_path() . DIRECTORY_SEPARATOR . "pansess_" . session_id())) {
+		unlink(session_save_path() . DIRECTORY_SEPARATOR . "pansess_" . session_id());
 	}
 }
 else {
