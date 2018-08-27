@@ -15,5 +15,5 @@ cp /docker-entrypoint-initdb.d/pandoradb.sql /tmp/ee && sed -i \"1iUSE \$MYSQL_D
 cp /docker-entrypoint-initdb.d/pandoradb_data.sql /tmp/ee && sed -i \"1iUSE \$MYSQL_DATABASE\" /tmp/ee && cat /tmp/ee > /docker-entrypoint-initdb.d/pandoradb_data.sql \n\
 " >> /docker-entrypoint-initdb.d/create_pandoradb.sh
 
-# Fix compatibilty issues with latest MySQL version
+# Fix compatibility issues with latest MySQL version
 RUN echo "\nsql_mode = NO_ENGINE_SUBSTITUTION\n" >> /etc/mysql/mysql.conf.d/mysqld.cnf
