@@ -11,6 +11,15 @@ RUN yum install -y git && \
 FROM centos:centos6
 LABEL maintainer="Pandora FMS Team <info@pandorafms.com>"
 
+RUN { \
+	echo '[rpmforge]'; \
+	echo 'name = RHEL $releasever - RPMforge.net - dag'; \
+	echo 'baseurl = http://apt.sw.be/redhat/el6/en/$basearch/rpmforge'; \
+	echo 'mirrorlist = http://mirrorlist.repoforge.org/el6/mirrors-rpmforge'; \
+	echo 'enabled=1'; \
+	echo 'gpgcheck=0'; \
+} > /etc/yum.repos.d/rpmforge.repo
+
 RUN yum -y update && \
 	yum install -y \
 	cronie \
@@ -20,30 +29,31 @@ RUN yum -y update && \
 	xterm \
 	postfix \
 	wmic \
-	perl-HTML-Tree \ 
-	perl-DBI \ 
-	perl-DBD-mysql \ 
-	perl-libwww-perl \ 
-	perl-XML-Simple \ 
-	perl-XML-SAX \ 
-	perl-NetAddr-IP \ 
-	net-snmp \ 
-	net-tools \ 
-	perl-IO-Socket-INET6 \ 
-	perl-Socket6 \ 
-	nmap \ 
-	sudo \ 
-	xprobe2 \ 
-	make \ 
-	perl-CPAN \ 
-	perl-JSON \ 
-	net-snmp-perl \ 
-	perl-Time-HiRes \ 
-	perl-XML-Twig \ 
+	perl-HTML-Tree \
+	perl-DBI \
+	perl-DBD-mysql \
+	perl-libwww-perl \
+	perl-XML-Simple \
+	perl-XML-SAX \
+	perl-NetAddr-IP \
+	net-snmp \
+	net-tools \
+	perl-IO-Socket-INET6 \
+	perl-Socket6 \
+	nmap \
+	sudo \
+	xprobe2 \
+	make \
+	perl-CPAN \
+	perl-JSON \
+	net-snmp-perl \
+	perl-Geo-IP \
+	perl-Time-HiRes \
+	perl-XML-Twig \
 	perl-Encode-Locale \
 	net-snmp \
 	net-snmp-utils && \
-    yum clean all 
+    yum clean all
 	
 COPY --from=develop /tmp/pandorafms/pandora_server /tmp/pandorafms/pandora_server
 
