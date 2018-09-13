@@ -686,8 +686,8 @@ $table_chars->data[$row][1] = html_print_select($options_full_escale, 'full_scal
 $row++;
 
 
-$table_chars->data[$row][0] = __('Soft graphs:');
-$table_chars->data[$row][0] .= ui_print_help_tip(__('This option may cause performance issues'), true);
+$table_chars->data[$row][0] = __('Show only average');
+$table_chars->data[$row][0] .= ui_print_help_tip(__('If enabled, the module graphs will only show the average value, otherwise it will show three sets of data showing maximums, averages and minimums.'), true);
 
 $options_soft_graphs    = array();
 $options_soft_graphs[0] = __('Standard mode');
@@ -709,6 +709,10 @@ $table_chars->data[$row][1] = html_print_select($options_zoom_graphs, 'zoom_grap
 $row++;
 
 $table_chars->data[$row][0] = __('Graph image height');
+$table_chars->data[$row][0] .= ui_print_help_tip(
+	__('This is the height in pixels of the module graph or custom graph in the reports (both: HTML and PDF)'),
+	true
+);
 $table_chars->data[$row][1] = html_print_input_text ('graph_image_height', $config['graph_image_height'], '', 20, 20, true);
 $row++;
 
