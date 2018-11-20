@@ -359,7 +359,7 @@ if (! isset ($config['id_user'])) {
 				
 				if ($blocked) {
 					require_once ('general/login_page.php');
-					db_pandora_audit("Password expired", "Password expired: ".$nick, $nick);
+					db_pandora_audit("Password expired", "Password expired: ".io_safe_output($nick), io_safe_output($nick));
 					while (@ob_end_flush ());
 					exit ("</html>");
 				}
@@ -382,7 +382,7 @@ if (! isset ($config['id_user'])) {
 			
 			require_once ('general/login_page.php');
 			db_pandora_audit("Password expired",
-				"Password expired: " . $nick, $nick);
+				"Password expired: " . io_safe_output($nick), $nick);
 			while (@ob_end_flush ());
 			exit ("</html>");
 		}
@@ -452,6 +452,7 @@ if (! isset ($config['id_user'])) {
 								$id_dashboard_select =
 									db_get_value('id', 'tdashboard', 'name', $home_url);
 								$_GET['id_dashboard_select'] = $id_dashboard_select;
+								$_GET['d_from_main_page'] = 1;
 								break;
 							case 'Visual console':
 								$_GET["sec"] = "network";
@@ -539,20 +540,20 @@ if (! isset ($config['id_user'])) {
 			if ((!is_user_admin($nick) || $config['enable_pass_policy_admin']) && file_exists (ENTERPRISE_DIR . "/load_enterprise.php")) {
 				$blocked = login_check_blocked($nick);
 			}
-			
+			$nick_usable = io_safe_output($nick);
 			if (!$blocked) {
 				if (file_exists (ENTERPRISE_DIR . "/load_enterprise.php")) {
 					login_check_failed($nick); //Checks failed attempts
 				}
 				$login_failed = true;
 				require_once ('general/login_page.php');
-				db_pandora_audit("Logon Failed", "Invalid login: ".$nick, $nick);
+				db_pandora_audit("Logon Failed", "Invalid login: ".$nick_usable, $nick_usable);
 				while (@ob_end_flush ());
 				exit ("</html>");
 			}
 			else {
 				require_once ('general/login_page.php');
-				db_pandora_audit("Logon Failed", "Invalid login: ".$nick, $nick);
+				db_pandora_audit("Logon Failed", "Invalid login: ".$nick_usable, $nick_usable);
 				while (@ob_end_flush ());
 				exit ("</html>");
 			}
@@ -741,8 +742,7 @@ if (! isset ($config['id_user'])) {
 	}
 }
 else {
-	
-	if ( ($_GET["loginhash_data"])  && ($_GET["loginhash_data"])) {
+	if (isset($_GET["loginhash_data"])) {
 
         $loginhash_data = get_parameter("loginhash_data", "");
         $loginhash_user = str_rot13(get_parameter("loginhash_user", ""));
@@ -940,7 +940,12 @@ if (get_parameter ('login', 0) !== 0) {
 			
 		include_once("general/login_help_dialog.php");
 	}
-	
+
+	$php_version = phpversion();
+	$php_version_array = explode('.', $php_version);
+	if($php_version_array[0] < 7){
+		include_once("general/php7_message.php");
+	}
 }
 
 // Header
@@ -1059,7 +1064,7 @@ else {
 					break;
 				case 'Dashboard':
 					$id_dashboard = db_get_value('id', 'tdashboard', 'name', $home_url);
-					$str = 'sec=reporting&sec2='.ENTERPRISE_DIR.'/dashboard/main_dashboard&id='.$id_dashboard;
+					$str = 'sec=reporting&sec2='.ENTERPRISE_DIR.'/dashboard/main_dashboard&id='.$id_dashboard.'&d_from_main_page=1';
 					parse_str($str, $res);
 					foreach ($res as $key => $param) {
 						$_GET[$key] = $param;

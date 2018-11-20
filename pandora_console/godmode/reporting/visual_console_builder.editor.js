@@ -50,10 +50,10 @@ function toggle_advance_options_palette(close) {
 function visual_map_main() {
 	img_handler_start = "images/dot_red.png";
 	img_handler_end = "images/dot_green.png";
-	get_image_url(img_handler_start).success(function (data) {
+	get_image_url(img_handler_start).done(function (data) {
 		img_handler_start = data;
 	});
-	get_image_url(img_handler_end).success(function (data) {
+	get_image_url(img_handler_end).done(function (data) {
 		img_handler_end = data;
 	});
 
@@ -65,9 +65,7 @@ function visual_map_main() {
 	eventsItems();
 
 	//Fixed to wait the load of images.
-	$(window).load(function() {
-		
-
+	$(window).on('load', function() {
 		$('#module').change(function(){
 			var txt = $("#module").val();
 			if(selectedItem == 'simple_value' || creationItem == 'simple_value'){
@@ -153,8 +151,7 @@ function visual_map_main() {
 			draw_user_lines("", 0, 0, 0 , 0, 0, true);
 
 			//~ center_labels();
-		}
-	);
+	});
 
 	obj_js_user_lines = new jsGraphics("background");
 
@@ -849,8 +846,7 @@ function readFields() {
 	
 	values['enable_link'] = $("input[name=enable_link]").is(':checked') ? 1 : 0;
 	values['id_group'] = $("select[name=group]").val();
-	values['id_custom_graph'] = parseInt(
-		$("#custom_graph option:selected").val());
+	values['id_custom_graph'] = $("#custom_graph option:selected").val();
 	values['width_box'] = parseInt(
 		$("input[name='width_box']").val());
 	values['height_box'] = parseInt(
@@ -870,6 +866,7 @@ function readFields() {
 	values['time_format'] = $("select[name=time_format]").val();
 	values['timezone'] = $("select[name=timezone]").val();
 	values['clock_animation'] = $("select[name=clock_animation]").val();
+	values['show_last_value'] = $("select[name=last_value]").val();
 	
 	if (is_metaconsole()) {
 		values['metaconsole'] = 1;
@@ -1380,7 +1377,6 @@ function loadFieldsFromDB(item) {
 		}
 	});
 
-
 	parameter = Array();
 	parameter.push ({name: "page",
 		value: "include/ajax/visual_console_builder.ajax"});
@@ -1459,26 +1455,26 @@ function loadFieldsFromDB(item) {
 					$("select[name=type_graph]").val(val);
 				}
 					
-					if (key == 'label_position') {
-						if($("#hidden-metaconsole").val() == 1){
-							$('#labelposup'+" img").attr('src','../../images/label_up.png');
-							$('#labelposdown'+" img").attr('src','../../images/label_down.png');
-							$('#labelposleft'+" img").attr('src','../../images/label_left.png');
-							$('#labelposright'+" img").attr('src','../../images/label_right.png');
-							$('.labelpos').attr('sel','no');
-							$('#labelpos'+val+" img").attr('src','../../images/label_'+$('#labelpos'+val).attr('id').replace('labelpos','')+'_2.png');
-							$('#labelpos'+val).attr('sel','yes');
-						}
-						else{
-							$('#labelposup'+" img").attr('src','images/label_up.png');
-							$('#labelposdown'+" img").attr('src','images/label_down.png');
-							$('#labelposleft'+" img").attr('src','images/label_left.png');
-							$('#labelposright'+" img").attr('src','images/label_right.png');
-							$('.labelpos').attr('sel','no');
-							$('#labelpos'+val+" img").attr('src','images/label_'+$('#labelpos'+val).attr('id').replace('labelpos','')+'_2.png');
-							$('#labelpos'+val).attr('sel','yes');
-						}
+				if (key == 'label_position') {
+					if($("#hidden-metaconsole").val() == 1){
+						$('#labelposup'+" img").attr('src','../../images/label_up.png');
+						$('#labelposdown'+" img").attr('src','../../images/label_down.png');
+						$('#labelposleft'+" img").attr('src','../../images/label_left.png');
+						$('#labelposright'+" img").attr('src','../../images/label_right.png');
+						$('.labelpos').attr('sel','no');
+						$('#labelpos'+val+" img").attr('src','../../images/label_'+$('#labelpos'+val).attr('id').replace('labelpos','')+'_2.png');
+						$('#labelpos'+val).attr('sel','yes');
 					}
+					else{
+						$('#labelposup'+" img").attr('src','images/label_up.png');
+						$('#labelposdown'+" img").attr('src','images/label_down.png');
+						$('#labelposleft'+" img").attr('src','images/label_left.png');
+						$('#labelposright'+" img").attr('src','images/label_right.png');
+						$('.labelpos').attr('sel','no');
+						$('#labelpos'+val+" img").attr('src','images/label_'+$('#labelpos'+val).attr('id').replace('labelpos','')+'_2.png');
+						$('#labelpos'+val).attr('sel','yes');
+					}
+				}
 					
 				if (key == 'image') {
 					//Load image preview
@@ -1543,8 +1539,17 @@ function loadFieldsFromDB(item) {
 					$("select[name=parent]").val(val);
 				if (key == 'linked_layout_status_type')
 					$("select[name=linked_map_status_calculation_type]").val(val).change();
-				if (key == 'id_layout_linked')
-					$("select[name=map_linked]").val(val).change();
+				if (key == 'id_layout_linked') {
+					if (val != 0) {
+						if (data['linked_layout_node_id'] == null) {
+							$("select[name=map_linked]").val(val).change();
+						} else {
+							var $option = $("select[name=map_linked] > option[data-node-id=" + data['linked_layout_node_id'] + "][value=" + val + "]");
+							if ($option.length === 0) $option = $("select[name=map_linked] > option[value=" + val + "]");
+							$option.prop("selected", true).parent().change();
+						}
+					}
+				}
 				if (key == 'linked_layout_node_id')
 					$("input[name=linked_map_node_id]").val(val);
 				if (key == 'id_layout_linked_weight')
@@ -1580,6 +1585,10 @@ function loadFieldsFromDB(item) {
 					$("input[name=percentile_label_color]").val(val);
 					$("#percentile_item_row_6 .ColorPickerDivSample")
 						.css('background-color', val);
+				}
+				
+				if (key == 'show_last_value') {
+					$("select[name=last_value]").val(val);
 				}
 				
 				if (key == 'clock_animation') 
@@ -1702,8 +1711,13 @@ function loadFieldsFromDB(item) {
 						.prop('checked', true);
 					$("input[name='radio_choice']").trigger('change');
 
-	  		$("#custom_graph option[value=" + data.id_custom_graph + "]").prop("selected", true);
-										
+					if (is_metaconsole()){
+						$("#custom_graph option[value='" + data.id_custom_graph + '|' + data.id_metaconsole + "']").prop("selected", true);
+					}
+					else{
+						$("#custom_graph option[value=" + data.id_custom_graph + "]").prop("selected", true);
+					}
+
 				}
 			}
 
@@ -1844,6 +1858,9 @@ function hiddenFields(item) {
 
 	$("#percentile_bar_row_2").css('display', 'none');
 	$("#percentile_bar_row_2." + item).css('display', '');
+	
+	$("#show_last_value_row").css('display', 'none');
+	$("#show_last_value_row." + item).css('display', '');
 
 	$("#percentile_item_row_3").css('display', 'none');
 	$("#percentile_item_row_3." + item).css('display', '');
@@ -1958,14 +1975,14 @@ function cleanFields(item) {
 	$("select[name=period]").val('');
 	$("input[name=width]").val(0);
 	$("input[name=height]").val(0);
-	$("select[name=parent]").val('');
+	$("select[name=parent]").val(0);
 	$("select[name=linked_map_status_calculation_type]").val('default').change();
-	$("select[name=map_linked]").val('').change();
+	$("select[name=map_linked]").val(0).change();
 	$("input[name=linked_map_node_id]").val(0);
 	$("input[name=map_linked_weight]").val('');
 	$("input[name=linked_map_status_service_critical]").val('');
 	$("input[name=linked_map_status_service_warning]").val('');
-	$("select[name=element_group]").val('');
+	$("select[name=element_group]").val(0);
 	$("input[name=width_module_graph]").val(300);
 	$("input[name=height_module_graph]").val(180);
 	$("input[name='width_box']").val(300);
@@ -2300,12 +2317,18 @@ function setModuleGraph(id_data) {
 				dataType: 'json',
 				success: function (data)
 				{
+
+					var url_hack_metaconsole = '';
+					if (is_metaconsole()) {
+						url_hack_metaconsole = '../../';
+					}
+
 					if (data['no_data'] == true) {
 						$('#' + id_data).html(data['url']);
 					}
 					else {
 						if($("#module_row").css('display')!='none'){
-							$("#" + id_data + " img").attr('src', 'images/console/signes/module_graph.png');
+							$("#" + id_data + " img").attr('src', url_hack_metaconsole + 'images/console/signes/module_graph.png');
 								if($('#text-width_module_graph').val() == 0 || $('#text-height_module_graph').val() == 0){
 									$("#" + id_data + " img").css('width', '300px');
 									$("#" + id_data + " img").css('height', '180px');
@@ -2315,7 +2338,7 @@ function setModuleGraph(id_data) {
 									$("#" + id_data + " img").css('height', $('#text-height_module_graph').val()+'px');
 								}
 						}else{
-							$("#" + id_data + " img").attr('src', 'images/console/signes/custom_graph.png');
+							$("#" + id_data + " img").attr('src', url_hack_metaconsole + 'images/console/signes/custom_graph.png');
 								if($('#text-width_module_graph').val() == 0 || $('#text-height_module_graph').val() == 0){
 									$("#" + id_data + " img").css('width', '300px');
 									$("#" + id_data + " img").css('height', '180px');
@@ -2593,7 +2616,7 @@ function setEventsBar(id_data, values) {
 	parameter.push ({name: "id_agent", value: values['id_agent']});
 	parameter.push ({name: "id_agent_module", value: values['module']});
 	if (is_metaconsole()) {
-		parameter.push ({name: "id_metaconsole", value: id_metaconsole});
+		parameter.push ({name: "id_metaconsole", value: values['server_id']});
 	}
 	parameter.push ({name: "period", value: values['event_max_time_row']});
 	parameter.push ({name: "id_visual_console", value: id_visual_console});

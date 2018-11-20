@@ -158,7 +158,7 @@ require Exporter;
 our @ISA = ("Exporter");
 our %EXPORT_TAGS = ( 'all' => [ qw( ) ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-our @EXPORT = qw( 	
+our @EXPORT = qw(
 	pandora_add_agent_address
 	pandora_audit
 	pandora_create_agent
@@ -234,6 +234,7 @@ our @EXPORT = qw(
 	pandora_self_monitoring
 	pandora_process_policy_queue
 	subst_alert_macros
+	locate_agent
 	get_agent
 	get_agent_from_alias
 	get_agent_from_addr
@@ -258,6 +259,32 @@ our $EventStormProtection :shared = 0;
 
 # Current master server
 my $Master :shared = 0;
+
+##########################################################################
+# Return the agent given the agent name or alias or address.
+##########################################################################
+sub locate_agent {
+	my ($pa_config, $dbh, $field) = @_;
+
+	if (is_metaconsole($pa_config)) {
+		# Locate agent first in tmetaconsole_agent
+		return undef if (! defined ($field) || $field eq '');
+
+		my $rs = enterprise_hook('get_metaconsole_agent_from_alias', [$dbh, $field]);
+		return $rs if defined($rs) && (ref($rs)); # defined and not a scalar
+
+		$rs = enterprise_hook('get_metaconsole_agent_from_addr', [$dbh, $field]);
+		return $rs if defined($rs) && (ref($rs)); # defined and not a scalar
+
+		$rs = enterprise_hook('get_metaconsole_agent_from_name', [$dbh, $field]);
+		return $rs if defined($rs) && (ref($rs)); # defined and not a scalar
+
+	} else {
+		return get_agent($dbh, $field);
+	}
+
+	return undef;
+}
 
 
 ##########################################################################
@@ -1887,7 +1914,7 @@ sub pandora_planned_downtime_unset_quiet_elements($$$) {
 ########################################################################
 =head2 C<< pandora_planned_downtime_quiet_once_stop (I<$pa_config>, I<$dbh>) >> 
 
-Start the planned downtime, the once type. 
+Stop the planned downtime, the once type. 
 
 =cut
 ########################################################################
@@ -1895,7 +1922,7 @@ sub pandora_planned_downtime_quiet_once_stop($$) {
 	my ($pa_config, $dbh) = @_;
 	my $utimestamp = time();
 	
-	# Stop pending downtimes
+	# Stop executed downtimes
 	my @downtimes = get_db_rows($dbh, 'SELECT *
 		FROM tplanned_downtime
 		WHERE type_downtime = ?
@@ -1996,8 +2023,8 @@ sub pandora_planned_downtime_monthly_start($$) {
 			AND type_execution <> ' . $RDBMS_QUOTE_STRING . 'once' . $RDBMS_QUOTE_STRING . '
 			AND ((periodically_day_from = ? AND periodically_time_from <= ?) OR (periodically_day_from < ?))
 			AND ((periodically_day_to = ? AND periodically_time_to >= ?) OR (periodically_day_to > ?))',
-			'monthly', 'number_day_month',
-			$time, $number_day_month,
+			'monthly',
+			$number_day_month, $time, $number_day_month,
 			$number_day_month, $time, $number_day_month);
 	
 	foreach my $downtime (@downtimes) {	
@@ -2034,7 +2061,7 @@ sub pandora_planned_downtime_monthly_start($$) {
 ########################################################################
 =head2 C<< pandora_planned_downtime_monthly_stop (I<$pa_config>, I<$dbh>) >> 
 
-Start the planned downtime, the montly type. 
+Stop the planned downtime, the monthly type. 
 
 =cut
 ########################################################################
@@ -2065,7 +2092,7 @@ sub pandora_planned_downtime_monthly_stop($$) {
 		$number_day_month = 31;
 	}
 	
-	# Start pending downtimes
+	# Stop executed downtimes
 	my @downtimes = get_db_rows($dbh, 'SELECT *
 		FROM tplanned_downtime
 		WHERE type_periodicity = ?
@@ -2111,7 +2138,7 @@ sub pandora_planned_downtime_monthly_stop($$) {
 ########################################################################
 =head2 C<< pandora_planned_downtime_weekly_start (I<$pa_config>, I<$dbh>) >> 
 
-Start the planned downtime, the montly type. 
+Start the planned downtime, the weekly type. 
 
 =cut
 ########################################################################
@@ -2220,7 +2247,7 @@ sub pandora_planned_downtime_weekly_start($$) {
 ########################################################################
 =head2 C<< pandora_planned_downtime_weekly_stop (I<$pa_config>, I<$dbh>) >> 
 
-Stop the planned downtime, the montly type. 
+Stop the planned downtime, the weekly type. 
 
 =cut
 ########################################################################
@@ -2236,7 +2263,7 @@ sub pandora_planned_downtime_weekly_stop($$) {
 	my $found = 0;
 	my $stop_downtime = 0;
 	
-	# Start pending downtimes
+	# Stop executed downtimes
 	my @downtimes = get_db_rows($dbh, 'SELECT *
 		FROM tplanned_downtime
 		WHERE type_periodicity = ?
@@ -3827,30 +3854,24 @@ sub process_data ($$$$$$$) {
 	# If is a number, we need to replace "," for "."
 	$data =~ s/\,/\./;
 
-	# Out of bounds
-	if (($module->{'max'} != $module->{'min'}) && ($data > $module->{'max'} || $data < $module->{'min'})) {
-		logger($pa_config, "Received invalid data '" . $data_object->{'data'} . "' from agent '" . $agent->{'nombre'} . "' module '" . $module->{'nombre'} . "' agent " . (defined ($agent) ? "'" . $agent->{'nombre'} . "'" : 'ID ' . $module->{'id_agente'}) . ".", 3);
-		return undef;
-	}
-
 	# Process INC modules
 	if ($module_type =~ m/_inc$/) {
-		$data = process_inc_data ($pa_config, $data, $module, $utimestamp, $dbh);
+		$data = process_inc_data ($pa_config, $data, $module, $agent, $utimestamp, $dbh);
 		
 		# No previous data or error.
 		return undef unless defined ($data);
 	}
 	# Process absolute INC modules
 	elsif ($module_type =~ m/_inc_abs$/) {
-		$data = process_inc_abs_data ($pa_config, $data, $module, $utimestamp, $dbh);
+		$data = process_inc_abs_data ($pa_config, $data, $module, $agent, $utimestamp, $dbh);
 		
 		# No previous data or error.
 		return undef unless defined ($data);
 	}
-
-	# Post process
-	if (is_numeric ($module->{'post_process'}) && $module->{'post_process'} != 0) {
-		$data = $data * $module->{'post_process'};
+	# Process the rest of modules
+	else {
+		$data = post_process($data, $module);
+		return undef unless check_min_max($pa_config, $data, $module, $agent);
 	}
 
 	# TODO: Float precission should be adjusted here in the future with a global
@@ -3863,10 +3884,34 @@ sub process_data ($$$$$$$) {
 }
 
 ##########################################################################
+# Apply post processing to the given data.
+##########################################################################
+sub post_process ($$) {
+	my ($data, $module) = @_;
+
+	return (is_numeric ($module->{'post_process'}) && $module->{'post_process'} != 0) ? $data * $module->{'post_process'} : $data;
+}
+
+##########################################################################
+# Return 1 if the data is whithin the module's boundaries, 0 if not.
+##########################################################################
+sub check_min_max ($$$$) {
+	my ($pa_config, $data, $module, $agent) = @_;
+
+	# Out of bounds
+	if (($module->{'max'} != $module->{'min'}) && ($data > $module->{'max'} || $data < $module->{'min'})) {
+		logger($pa_config, "Received invalid data '" . $data . "' from agent '" . $agent->{'nombre'} . "' module '" . $module->{'nombre'} . "' agent " . (defined ($agent) ? "'" . $agent->{'nombre'} . "'" : 'ID ' . $module->{'id_agente'}) . ".", 3);
+		return 0;
+	}
+
+	return 1;
+}
+
+##########################################################################
 # Process data of type *_inc.
 ##########################################################################
-sub process_inc_data ($$$$$) {
-	my ($pa_config, $data, $module, $utimestamp, $dbh) = @_;
+sub process_inc_data ($$$$$$) {
+	my ($pa_config, $data, $module, $agent, $utimestamp, $dbh) = @_;
 
 	my $data_inc = get_db_single_row ($dbh, 'SELECT * FROM tagente_datos_inc WHERE id_agente_modulo = ?', $module->{'id_agente_modulo'});
 
@@ -3901,17 +3946,25 @@ sub process_inc_data ($$$$$) {
 		return undef;
 	}
 
+	# Compute the rate, apply post processing and check module boundaries.
+	my $rate = ($data - $data_inc->{'datos'}) / ($utimestamp - $data_inc->{'utimestamp'});
+	$rate = post_process($rate, $module);
+	if (!check_min_max($pa_config, $rate, $module, $agent)) {
+		db_do ($dbh, 'UPDATE tagente_datos_inc SET datos = ?, utimestamp = ? WHERE id_agente_modulo = ?', $data, $utimestamp, $module->{'id_agente_modulo'});
+		return undef;
+	}
+
 	# Update inc data
 	db_do ($dbh, 'UPDATE tagente_datos_inc SET datos = ?, utimestamp = ? WHERE id_agente_modulo = ?', $data, $utimestamp, $module->{'id_agente_modulo'});
 
-	return ($data - $data_inc->{'datos'}) / ($utimestamp - $data_inc->{'utimestamp'});
+	return $rate;
 }
 
 ##########################################################################
 # Process data of type *_inc_abs.
 ##########################################################################
-sub process_inc_abs_data ($$$$$) {
-	my ($pa_config, $data, $module, $utimestamp, $dbh) = @_;
+sub process_inc_abs_data ($$$$$$) {
+	my ($pa_config, $data, $module, $agent, $utimestamp, $dbh) = @_;
 
 	my $data_inc = get_db_single_row ($dbh, 'SELECT * FROM tagente_datos_inc WHERE id_agente_modulo = ?', $module->{'id_agente_modulo'});
 
@@ -3941,10 +3994,18 @@ sub process_inc_abs_data ($$$$$) {
 		return undef;
 	}
 
+	# Compute the diff, apply post processing and check module boundaries.
+	my $diff = ($data - $data_inc->{'datos'});
+	$diff = post_process($diff, $module);
+	if (!check_min_max($pa_config, $diff, $module, $agent)) {
+		db_do ($dbh, 'UPDATE tagente_datos_inc SET datos = ?, utimestamp = ? WHERE id_agente_modulo = ?', $data, $utimestamp, $module->{'id_agente_modulo'});
+		return undef;
+	}
+
 	# Update inc data
 	db_do ($dbh, 'UPDATE tagente_datos_inc SET datos = ?, utimestamp = ? WHERE id_agente_modulo = ?', $data, $utimestamp, $module->{'id_agente_modulo'});
 
-	return ($data - $data_inc->{'datos'});
+	return $diff;
 }
 
 sub log4x_get_severity_num($) {
@@ -4855,7 +4916,7 @@ sub pandora_self_monitoring ($$) {
 
 	my $filename = $pa_config->{"incomingdir"}."/".$pa_config->{'servername'}.".self.".$utimestamp.".data";
 	
-	open (XMLFILE, ">> $filename") or die "[FATAL] Could not open internal monitoring XML file for deploying monitorization at '$filename'";
+	open (XMLFILE, ">", $filename) or die "[FATAL] Could not open internal monitoring XML file for deploying monitorization at '$filename'";
 	print XMLFILE $xml_output;
 	close (XMLFILE);
 }

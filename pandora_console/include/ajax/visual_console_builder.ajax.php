@@ -101,7 +101,7 @@ $height = get_parameter('height', null);
 $parent = get_parameter('parent', null);
 $map_linked = get_parameter('map_linked', null);
 $linked_map_node_id = get_parameter('linked_map_node_id', null);
-$linked_map_status_calculation_type = get_parameter('linked_map_status_calculation_type', 'default');
+$linked_map_status_calculation_type = get_parameter('linked_map_status_calculation_type', null);
 
 $map_linked_weight = get_parameter('map_linked_weight', null);
 if ($map_linked_weight !== null) {
@@ -163,6 +163,8 @@ $show_statistics = get_parameter('show_statistics', 0);
 $clock_animation = get_parameter('clock_animation', 'analogic_1');
 $time_format = get_parameter('time_format', 'time');
 $timezone = get_parameter('timezone', 'Europe/Madrid');
+
+$show_last_value = get_parameter('show_last_value', null);
 
 switch ($action) {
 	case 'get_font':
@@ -326,8 +328,19 @@ switch ($action) {
 	
 	
 	case 'get_layout_data':
+		if(is_metaconsole()){
+			$server_data = metaconsole_get_connection_by_id($server_id);
+			// Establishes connection
+			if (metaconsole_load_external_db($server_data) !== NOERR) continue;
+		}
+
 		$layoutData = db_get_row_filter('tlayout_data',
 			array('id' => $id_element));
+
+		if(is_metaconsole()){
+			metaconsole_restore_db();
+		}
+
 		$layoutData['height'] = $layoutData['height'];
 		$layoutData['width']  = $layoutData['width'];
 		echo json_encode($layoutData);
@@ -615,8 +628,8 @@ switch ($action) {
 						$values['id_agent'] = $id_agent;
 					}
 
-					if ($linked_map_node_id) {
-						$values['linked_layout_node_id'] = $linked_map_node_id;
+					if ($linked_map_node_id !== null) {
+						$values['linked_layout_node_id'] = (int) $linked_map_node_id;
 					}
 				}
 				else if ($id_agent == 0) {
@@ -724,6 +737,14 @@ switch ($action) {
 						if ($id_custom_graph !== null) {
 							$values['id_custom_graph'] = $id_custom_graph;
 						}
+
+						if(is_metaconsole()){
+							if($values['id_custom_graph'] != 0){
+								$explode_id = explode("|", $values['id_custom_graph']);
+								$values['id_custom_graph'] = $explode_id[0];
+								$values['id_metaconsole'] = $explode_id[1];
+							}
+						}
 						break;
 					case 'bars_graph':
 						if ($width_percentile !== null) {
@@ -784,6 +805,9 @@ switch ($action) {
 						}
 						if ($height !== null) {
 							$values['height'] = $height;
+						}
+						if ($show_last_value !== null) {
+							$values['show_last_value'] = $show_last_value;
 						}
 						break;
 					case 'simple_value':
@@ -988,7 +1012,6 @@ switch ($action) {
 				if (isset($elementFields["linked_layout_status_as_service_warning"])) {
 					$elementFields["linked_layout_status_as_service_warning"] = (float) $elementFields["linked_layout_status_as_service_warning"];
 				}
-				
 				switch ($type) {
 					case 'auto_sla_graph':
 						$elementFields['event_max_time_row'] = $elementFields['period'];
@@ -1054,7 +1077,7 @@ switch ($action) {
 								$elementFields['id_agent'], false,
 								array('disabled' => 0,
 									'id_agente' => $elementFields['id_agent'],
-									'tagente_modulo.id_tipo_modulo IN' => "(17,23,3,10,33)"));
+									'tagente_modulo.id_tipo_modulo IN' => "(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,18,17,23,3,10,33)"));
 							
 							$elementFields['modules_html'] = '<option value="0">--</option>';
 							foreach ($modules as $id => $name) {
@@ -1202,13 +1225,31 @@ switch ($action) {
 				break;
 			case 'module_graph':
 				$values['type'] = MODULE_GRAPH;
-				
+
+				if(is_metaconsole()){
+					if($values['id_custom_graph'] != 0){
+						$explode_id = explode("|", $values['id_custom_graph']);
+						$values['id_custom_graph'] = $explode_id[0];
+						$values['id_metaconsole'] = $explode_id[1];
+					}
+				}
+
 				if ($values['id_custom_graph'] > 0 ) {
 					$values['height'] = $height_module_graph;
 					$values['width'] = $width_module_graph;
-					
+
+					if(is_metaconsole()){
+						$server_data = metaconsole_get_connection_by_id($values['id_metaconsole']);
+						// Establishes connection
+						if (metaconsole_load_external_db($server_data) !== NOERR) continue;
+					}
+
 					$graph_conf = db_get_row('tgraph', 'id_graph', $values['id_custom_graph']);
-					
+
+					if(is_metaconsole()){
+						metaconsole_restore_db();
+					}
+
 					$graph_stacked = $graph_conf['stacked'];
 					if ( $graph_stacked == CUSTOM_GRAPH_BULLET_CHART) {
 						$values['height'] = 50;
@@ -1281,6 +1322,7 @@ switch ($action) {
 				$values['image'] = $image;
 				$values['width'] = $width;
 				$values['height'] = $height;
+				$values['show_last_value'] = $show_last_value;
 				break;
 			case 'group_item':
 				$values['type'] = GROUP_ITEM;

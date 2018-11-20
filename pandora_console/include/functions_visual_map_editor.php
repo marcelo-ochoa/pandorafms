@@ -203,7 +203,7 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 			$form_items['image_row']['html'] =
 				'<td align="left">' . __('Image') . '</td>
 				<td align="left">' .
-				html_print_select ($images_list, 'image', '', 'showPreview(this.value);', 'None', 'none', true) .
+				html_print_select ($images_list, 'image', '', 'showPreview(this.value);', 'None', '', true) .
 				'</td>';
 				
 			$form_items['clock_animation_row'] = array();
@@ -298,7 +298,7 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 						'#000000', 'text-grid_color', '', 7, 7, false,
 						'', 'class="grid_color"', true) .
 				'</td>';
-					
+
 			$form_items['radio_choice_graph'] = array();
 			$form_items['radio_choice_graph']['items'] = array(
 				'module_graph',
@@ -312,27 +312,25 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 				. __('Custom graph') . "&nbsp;&nbsp;" .
 				html_print_radio_button('radio_choice', 'custom_graph', '', 'module_graph', true) .
 				'</td>';
-			
-			
+
 			$form_items['custom_graph_row'] = array();
-			$form_items['custom_graph_row']['items'] = array(
-				'module_graph',
-				'datos');
-			$form_items['custom_graph_row']['html'] =
-				'<td align="left" style="">' . __('Custom graph') . '</td>
-				<td align="left" style="">' .
-				html_print_select_from_sql(
-					"SELECT id_graph, name FROM tgraph", 'custom_graph',
-					'', '', __('None'), 0, true) .
-				'</td>';
-			
-			
+			$form_items['custom_graph_row']['html'] = '<td align="left" style="">' . __('Custom graph') . '</td><td align="left" style="">';
+			if(is_metaconsole()){
+				$graphs = array();
+				$graphs = metaconsole_get_custom_graphs(true);
+				$form_items['custom_graph_row']['html'] .= html_print_select($graphs, 'custom_graph', '', '', __('None'), 0, true);
+			}
+			else{
+				$form_items['custom_graph_row']['html'] .= html_print_select_from_sql("SELECT id_graph, name FROM tgraph", 'custom_graph','', '', __('None'), 0, true);
+			}
+			$form_items['custom_graph_row']['html'] .= '</td>';
+
 			$form_items['agent_row'] = array();
 			$form_items['agent_row']['items'] = array('static_graph',
 				'percentile_bar', 'percentile_item', 'module_graph',
 				'simple_value', 'datos', 'auto_sla_graph');
 			$form_items['agent_row']['html'] = '<td align="left">' .
-				__('Agent') . '</td>';			
+				__('Agent') . '</td>';
 			$params = array();
 			$params['return'] = true;
 			$params['show_helptip'] = true;
@@ -478,20 +476,20 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 			$form_items['background_row_2']['items'] = array('background', 'datos');
 			$form_items['background_row_2']['html'] = '<td align="left">' .
 				__('Original Size') . '</td>
-				<td align="left">' . html_print_button(__('Apply'), 'original_false', false, "setAspectRatioBackground('original')", 'class="sub"', true) . '</td>';
+				<td align="left">' . html_print_button(__('Apply'), 'original_false', false, "setAspectRatioBackground('original')", 'class="sub vs_button_ghost"', true) . '</td>';
 			
 			
 			$form_items['background_row_3'] = array();
 			$form_items['background_row_3']['items'] = array('background', 'datos');
 			$form_items['background_row_3']['html'] = '<td align="left">' .
 				__('Aspect ratio') . '</td>
-				<td align="left">' . html_print_button(__('Width proportional'), 'original_false', false, "setAspectRatioBackground('width')", 'class="sub"', true) . '</td>';
+				<td align="left">' . html_print_button(__('Proportional Width'), 'original_false', false, "setAspectRatioBackground('width')", 'class="sub vs_button_ghost"', true) . '</td>';
 			
 			
 			$form_items['background_row_4'] = array();
 			$form_items['background_row_4']['items'] = array('background', 'datos');
 			$form_items['background_row_4']['html'] = '<td align="left"></td>
-				<td align="left">' . html_print_button(__('Height proportional'), 'original_false', false, "setAspectRatioBackground('height')", 'class="sub"', true) . '</td>';
+				<td align="left">' . html_print_button(__('Height proportional'), 'original_false', false, "setAspectRatioBackground('height')", 'class="sub vs_button_ghost"', true) . '</td>';
 			
 			
 			$form_items['percentile_bar_row_1'] = array();
@@ -590,6 +588,15 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 				<td align="left" style="">' .
 				html_print_checkbox('show_on_top', 1, '', true) . '</td>';
 			
+			$show_last_value = array('0' => __('Hide last value on boolean modules'), '1' => __('Enabled'), '2' => __('Disabled'));
+			$form_items['show_last_value_row'] = array();
+			$form_items['show_last_value_row']['items'] = array('static_graph');
+			$form_items['show_last_value_row']['html'] = 
+				'<td align="left" style="">' . __('Show last value') . '</td>
+				<td align="left">' .
+				html_print_select($show_last_value, 'last_value', 0, '', '', '', true) .
+				'</td>';
+			
 			$form_items['module_graph_size_row'] = array();
 			$form_items['module_graph_size_row']['items'] = array('module_graph', 'datos');
 			$form_items['module_graph_size_row']['html'] = '<td align="left">' . __('Size') . '</td>
@@ -633,7 +640,7 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 			
 			
 			foreach ($form_items as $item => $item_options) {
-				echo '<tr id="' . $item . '" style="" class="' . implode(' ', $item_options['items']) . '">';
+				echo '<tr id="' . $item . '" style="" class="' . implode(' ', (array)$item_options['items']) . '">';
 				echo $item_options['html'];
 				echo '</tr>';
 			}
@@ -689,7 +696,7 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 				__('Parent') . '</td>
 				<td align="left">' .
 				html_print_input_hidden('parents_load', base64_encode(json_encode($parents)), true) .
-				html_print_select($parents, 'parent', '', '', __('None'), 0, true) .
+				html_print_select($parents, 'parent', 0, '', __('None'), 0, true) .
 				'</td>';
 			
 			$form_items_advance['map_linked_row'] = array();
@@ -700,7 +707,7 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 			$visual_maps = db_get_all_rows_filter("tlayout", "id != " . (int) $visualConsole_id, array("id", "name"));
 
 			$form_items_advance['map_linked_row']['html'] = '<td align="left">'
-				. __('Linked map')
+				. __('Linked visual console')
 				. '</td>'
 				. '<td align="left">';
 
@@ -714,9 +721,11 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 
 					$node_visual_maps = db_get_all_rows_filter("tlayout", array(), array("id", "name"));
 
-					foreach ($node_visual_maps as $node_visual_map) {
-						$node_visual_map["node_id"] = (int) $server["id"];
-						$visual_maps[] = $node_visual_map;
+					if(isset($node_visual_maps) && is_array($node_visual_maps)){
+						foreach ($node_visual_maps as $node_visual_map) {
+							$node_visual_map["node_id"] = (int) $server["id"];
+							$visual_maps[] = $node_visual_map;
+						}
 					}
 
 					metaconsole_restore_db();
@@ -727,7 +736,7 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 					return $arr;
 				}, array());
 
-				$form_items_advance['map_linked_row']['html'] .= html_print_select_from_sql(
+				$form_items_advance['map_linked_row']['html'] .= html_print_select(
 					array(), 'map_linked', 0, 'onLinkedMapChange(event)', __('None'), 0, true
 				);
 				$form_items_advance['map_linked_row']['html'] .= html_print_input_hidden(
@@ -773,7 +782,11 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 				$form_items_advance['map_linked_row']['html'] .= ob_get_clean();
 			}
 			else {
-				$form_items_advance['map_linked_row']['html'] .= html_print_select_from_sql(
+				$visual_maps = array_reduce($visual_maps, function ($all, $item) {
+					$all[$item["id"]] = $item["name"];
+					return $all;
+				}, array());
+				$form_items_advance['map_linked_row']['html'] .= html_print_select(
 					$visual_maps, 'map_linked', 0, 'onLinkedMapChange(event)', __('None'), 0, true
 				);
 			}
@@ -790,7 +803,7 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 				'percentile_item', 'module_graph', 'simple_value',
 				'icon', 'label', 'datos', 'donut_graph');
 			$form_items_advance['linked_map_status_calculation_row']['html'] = '<td align="left">'.
-				__('Type of the status calculation of the linked map') . '</td>'
+				__('Type of the status calculation of the linked visual console') . '</td>'
 				. '<td align="left">'
 				. html_print_select(
 					$status_type_select_items, 
@@ -803,6 +816,7 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 					false,
 					false
 				)
+				. ui_print_help_icon("linked_map_status_calc", true)
 				. '</td>';
 
 			$form_items_advance['map_linked_weight'] = array();
@@ -811,13 +825,12 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 				'percentile_item', 'module_graph', 'simple_value',
 				'icon', 'label', 'datos', 'donut_graph');
 			$form_items_advance['map_linked_weight']['html'] = '<td align="left">'
-				. __('Linked map weight') . '</td>'
+				. __('Linked visual console weight') . '</td>'
 				. '<td align="left">'
 				. html_print_input_text(
 					'map_linked_weight', 80, '', 5, 5, true, false, false, "", "type_number percentage"
 				)
 				. '<span>%</span>'
-				. ui_print_help_icon("linked_map_weight", true)
 				. '</td>';
 
 			$form_items_advance['linked_map_status_service_critical_row'] = array();
@@ -866,11 +879,12 @@ function visual_map_editor_print_item_palette($visualConsole_id, $background) {
 					"VR",
 					true,
 					'element_group',
-					__('All'),
-					'',
-					'',
 					0,
-					true) .
+					'',
+					'',
+					'',
+					true
+				) .
 				ui_print_help_tip (
 					__("If selected, restrict visualization of this item in the visual console to users who have access to selected group. This is also used on calculating child visual consoles."), true) . 
 				'</td>';
