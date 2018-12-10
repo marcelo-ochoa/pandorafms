@@ -36,6 +36,7 @@ RUN yum -y update && \
 	perl-XML-Simple \
 	perl-XML-SAX \
 	perl-NetAddr-IP \
+	perl-Scope-Guard \
 	net-snmp \
 	net-tools \
 	perl-IO-Socket-INET6 \

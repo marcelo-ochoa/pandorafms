@@ -11,6 +11,27 @@ RUN yum install -y git && \
 FROM centos:centos6
 LABEL maintainer="Pandora FMS Team <info@pandorafms.com>"
 
+RUN { \
+	echo '[EPEL]'; \
+	echo 'name = CentOS Epel'; \
+	echo 'baseurl = http://dl.fedoraproject.org/pub/epel/6/x86_64'; \
+	echo 'enabled=1'; \
+	echo 'gpgcheck=0'; \
+	echo  ''; \
+	echo '[remi-php72]'; \
+	echo 'name=Remi php72'; \
+	echo 'baseurl=http://rpms.remirepo.net/enterprise/6/php72/x86_64/'; \
+	echo 'enabled=1'; \
+	echo 'gpgcheck=0'; \
+	echo  ''; \
+	echo '[remi-safe]'; \
+	echo 'name=Safe Remis RPM repository'; \
+	echo 'mirrorlist=http://cdn.remirepo.net/enterprise/$releasever/safe/mirror'; \
+	echo 'enabled=1'; \
+	echo 'gpgcheck=0'; \
+	echo  ''; \
+} > /etc/yum.repos.d/extra_repos.repo
+
 RUN yum -y update && \
 	yum install -y \ 
 	httpd \
