@@ -33,7 +33,8 @@ RUN { \
 } > /etc/yum.repos.d/extra_repos.repo
 
 RUN yum -y update && \
-	yum install -y \ 
+	yum install -y \
+	fontconfig freetype freetype-devel fontconfig-devel libstdc++ \ 
 	httpd \
 	cronie \
 	ntp \
@@ -71,6 +72,12 @@ EXPOSE 80 162/udp 443 41121
 ADD docker_entrypoint.sh /entrypoint.sh
 RUN rm -rf /tmp/pandorafms && rm -rf /tmp/* && rm -rf /var/tmp/* && \
     chmod -v +x /entrypoint.sh
+
+#Install phantomjs required for export graph pdf.
+RUN mkdir -p /opt/phantomjs/bin && cd /opt/phantomjs/bin; \
+	wget https://netcologne.dl.sourceforge.net/project/pandora/Tools%20and%20dependencies%20%28All%20versions%29/DEB%20Debian%2C%20Ubuntu/phantomjs; \
+	chmod +x phantomjs; \
+	ln -s /opt/phantomjs/bin/phantomjs /usr/bin/;
 
 CMD ["/entrypoint.sh"]
 

@@ -39,6 +39,10 @@ fi
 #Configure the Pandora FMS Server to connect to the database
 /generate_conf_from_env.sh
 
+# Wait MySQL startup
+chmod +x /wait-for-it.sh 
+/wait-for-it.sh -h ${MYSQL_PORT_3306_TCP_ADDR:-$PANDORA_DB_HOST} -p ${MYSQL_PORT_3306_TCP_PORT:-3306} -t 300
+
 #Rock n' roll!
 /etc/init.d/tentacle_serverd start &
 /usr/bin/pandora_server /etc/pandora/pandora_server.conf
