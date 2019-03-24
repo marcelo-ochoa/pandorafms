@@ -69,9 +69,9 @@ EXPOSE 41121
 ADD docker_entrypoint.sh /entrypoint.sh
 ADD generate_conf_from_env.sh /generate_conf_from_env.sh
 ADD run_cron.sh /run_cron.sh
-RUN rm -rf /tmp/pandorafms && rm -rf /tmp/* && rm -rf /var/tmp/* && \
-    chmod -v +x /entrypoint.sh
 ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /wait-for-it.sh
+RUN rm -rf /tmp/pandorafms && rm -rf /tmp/* && rm -rf /var/tmp/* && \
+    chmod -v +x /entrypoint.sh && chmod -v +x /wait-for-it.sh
 
 RUN wget http://rpmfind.net/linux/centos/6.10/os/x86_64/Packages/gettext-0.17-18.el6.x86_64.rpm; \
 	yum localinstall -y gettext-0.17-18.el6.x86_64.rpm; \
