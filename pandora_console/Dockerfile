@@ -63,7 +63,7 @@ RUN yum -y update && \
 	xprobe2 && \
 	yum clean all
 
-COPY --from=develop /tmp/pandorafms/pandora_console /var/www/html/pandora_console
+COPY --from=develop /tmp/pandorafms/pandora_console --chown apache:apache  /var/www/html/pandora_console/
 
 #Exposing ports for: HTTP, SNMP Traps, Tentacle protocol
 EXPOSE 80 162/udp 443 41121

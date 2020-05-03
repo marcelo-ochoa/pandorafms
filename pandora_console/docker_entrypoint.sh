@@ -53,8 +53,7 @@ echo "\$config[\"dbhost\"]=\"$PANDORA_DB_HOST\";" >> config.php
 echo "include (\$ownDir . \"config_process.php\");" >> config.php
 echo "?>" >> config.php
 
-echo "Granting apache permissions to the console directory"
-chown -R apache:apache /var/www/html/pandora_console
+echo "Changing permissions on config.php"
 chmod 600 /var/www/html/pandora_console/include/config.php
 
 # Customize php.iniA
