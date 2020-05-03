@@ -53,7 +53,8 @@ echo "\$config[\"dbhost\"]=\"$PANDORA_DB_HOST\";" >> config.php
 echo "include (\$ownDir . \"config_process.php\");" >> config.php
 echo "?>" >> config.php
 
-echo "Changing permissions on config.php"
+echo "Changing owner and permissions on config.php"
+chown apache:apache /var/www/html/pandora_console/include/config.php
 chmod 600 /var/www/html/pandora_console/include/config.php
 
 # Customize php.iniA
