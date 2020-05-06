@@ -11,9 +11,9 @@ If you choose to edit or create a new task of network recon, then you should fil
 
 Name of the discovery task. It's only a descriptive value to could distinguish the task in case it would have several of them with different values of filter or template. <br><br>
 
-<b>Recon server</b><br>
+<b>Discovery server</b><br>
 
-Recon Server assigned to the task. If you have several Recon Servers, then you have to select here which of them you want to do the recon task. <br><br>
+Discovery Server assigned to the task. If you have several Discovery Servers, then you have to select here which of them you want to do the recon task. <br><br>
 
 <b>Mode</b><br>
 
@@ -25,7 +25,7 @@ Network where you want to do the recognition. Use the network format/ bits mask.
 
 <b>Interval</b>
 <br>
-Repetition interval of systems search. Do not use intervals very shorts so Recon explores a network sending one Ping to each address. If you use recon networks very larges (for example a class A) combined with very short intervals (6 hours) you will be doing that <?php echo get_product_name();?> will be always bomb the network with pings, overloading it and also <?php echo get_product_name();?> unnecessarily.<br><br>
+Repetition interval of systems search. Do not use intervals very shorts so Recon explores a network sending one Ping to each address. If you use recon networks very larges (for example a class A) combined with very short intervals (6 hours) you will be doing that <?php echo get_product_name(); ?> will be always bomb the network with pings, overloading it and also <?php echo get_product_name(); ?> unnecessarily.<br><br>
 
 <b>Module template</b><br>
 
@@ -33,7 +33,7 @@ Plugins template to add to the discovered systems. When it detects a system that
 
 <b>OS</b><br>
 
-Operative system to recognize. If you select one instead of any (Any) it will only be added the systems with this operative system.Consider that in some circumstances <?php echo get_product_name();?> can make a mistake when detecting systems, so this kind of "guess" is done with statistic patterns, that depending on some other factors could fail (networks with filters, security software, modified versions of the systems).To could use this method with security, you should have installed Xprobe2 in your system. <br><br>
+Operative system to recognize. If you select one instead of any (Any) it will only be added the systems with this operative system.Consider that in some circumstances <?php echo get_product_name(); ?> can make a mistake when detecting systems, so this kind of "guess" is done with statistic patterns, that depending on some other factors could fail (networks with filters, security software, modified versions of the systems).To could use this method with security, you should have installed Xprobe2 in your system. <br><br>
 
 <b>Ports</b><br>
 

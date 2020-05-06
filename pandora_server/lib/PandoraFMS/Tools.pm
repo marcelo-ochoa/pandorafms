@@ -1,8 +1,8 @@
 package PandoraFMS::Tools;
-########################################################################
+################################################################################
 # Tools Package
 # Pandora FMS. the Flexible Monitoring System. http://www.pandorafms.org
-########################################################################
+################################################################################
 # Copyright (c) 2005-2011 Artica Soluciones Tecnologicas S.L
 #
 # This program is free software; you can redistribute it and/or
@@ -15,13 +15,13 @@ package PandoraFMS::Tools;
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-##########################################################################
+################################################################################
  
 use warnings;
 use Time::Local;
+eval "use POSIX::strftime::GNU;1" if ($^O =~ /win/i);
 use POSIX qw(setsid strftime);
 use POSIX;
-use PandoraFMS::Sendmail;
 use HTML::Entities;
 use Encode;
 use Socket qw(inet_ntoa inet_aton);
@@ -29,12 +29,21 @@ use Sys::Syslog;
 use Scalar::Util qw(looks_like_number);
 use LWP::UserAgent;
 use threads;
+use threads::shared;
+
+use JSON;
+use Encode qw/decode_utf8 encode_utf8/;
+
+use lib '/usr/lib/perl5';
+use PandoraFMS::Sendmail;
 
 # New in 3.2. Used to sendmail internally, without external scripts
 # use Module::Loaded;
 
 # Used to calculate the MD5 checksum of a string
 use constant MOD232 => 2**32;
+# 2 to the power of 32.
+use constant POW232 => 2**32;
 
 # UTF-8 flags deletion from multibyte characters when files are opened.
 use open OUT => ":utf8";
@@ -49,7 +58,7 @@ our @EXPORT = qw(
 	DATASERVER
 	NETWORKSERVER
 	SNMPCONSOLE
-	RECONSERVER
+	DISCOVERYSERVER
 	PLUGINSERVER
 	PREDICTIONSERVER
 	WMISERVER
@@ -69,6 +78,16 @@ our @EXPORT = qw(
 	MIGRATIONSERVER
 	METACONSOLE_LICENSE
 	OFFLINE_LICENSE
+	DISCOVERY_HOSTDEVICES
+	DISCOVERY_HOSTDEVICES_CUSTOM
+	DISCOVERY_CLOUD_AWS
+	DISCOVERY_APP_VMWARE
+	DISCOVERY_APP_MYSQL
+	DISCOVERY_APP_ORACLE
+	DISCOVERY_CLOUD_AWS_EC2
+	DISCOVERY_CLOUD_AWS_RDS
+	DISCOVERY_CLOUD_AZURE_COMPUTE
+	DISCOVERY_DEPLOY_AGENTS
 	$DEVNULL
 	$OS
 	$OS_VERSION
@@ -93,10 +112,14 @@ our @EXPORT = qw(
 	float_equal
 	sqlWrap
 	is_numeric
+	is_enabled
 	is_metaconsole
 	is_offline
+	is_empty
+	is_in_array
 	to_number
 	clean_blank
+	credential_store_get_key
 	pandora_sendmail
 	pandora_trash_ascii
 	enterprise_hook
@@ -110,6 +133,8 @@ our @EXPORT = qw(
 	md5_init
 	pandora_ping
 	pandora_ping_latency
+	pandora_block_ping
+	ping
 	resolve_hostname
 	ticks_totime
 	safe_input
@@ -117,18 +142,28 @@ our @EXPORT = qw(
 	month_have_days
 	translate_obj
 	valid_regex
+	read_file
 	set_file_permissions
 	uri_encode
 	check_server_threads
 	start_server_thread
 	stop_server_threads
+	generate_agent_name_hash
+	long_to_ip
+	ip_to_long
+	get_enabled_servers
+	dateTimeToTimestamp
+	get_user_agent
+	ui_get_full_url
+	p_encode_json
+	p_decode_json
 );
 
 # ID of the different servers
 use constant DATASERVER => 0;
 use constant NETWORKSERVER => 1;
 use constant SNMPCONSOLE => 2;
-use constant RECONSERVER => 3;
+use constant DISCOVERYSERVER => 3;
 use constant PLUGINSERVER => 4;
 use constant PREDICTIONSERVER => 5;
 use constant WMISERVER => 6;
@@ -163,6 +198,18 @@ use constant OFFLINE_LICENSE => 0x02;
 # Alert modes
 use constant RECOVERED_ALERT => 0;
 use constant FIRED_ALERT => 1;
+
+# Discovery task types
+use constant DISCOVERY_HOSTDEVICES => 0;
+use constant DISCOVERY_HOSTDEVICES_CUSTOM => 1;
+use constant DISCOVERY_CLOUD_AWS => 2;
+use constant DISCOVERY_APP_VMWARE => 3;
+use constant DISCOVERY_APP_MYSQL => 4;
+use constant DISCOVERY_APP_ORACLE => 5;
+use constant DISCOVERY_CLOUD_AWS_EC2 => 6;
+use constant DISCOVERY_CLOUD_AWS_RDS => 7;
+use constant DISCOVERY_CLOUD_AZURE_COMPUTE => 8;
+use constant DISCOVERY_DEPLOY_AGENTS => 9;
 
 # Set OS, OS version and /dev/null
 our $OS = $^O;
@@ -324,9 +371,31 @@ my @ServerThreads;
 # Keep threads running.
 our $THRRUN :shared = 1;
 
-###############################################################################
+################################################################################
+## Reads a file and returns entire content or undef if error.
+################################################################################
+sub read_file {
+	my $path = shift;
+
+	my $_FILE;
+	if( !open($_FILE, "<", $path) ) {
+		# failed to open, return undef
+		return undef;
+	}
+
+	# Slurp configuration file content.
+	my $content = do { local $/; <$_FILE> };
+
+	# Close file
+	close($_FILE);
+
+	return $content;
+}
+
+
+################################################################################
 # Sets user:group owner for the given file
-###############################################################################
+################################################################################
 sub set_file_permissions($$;$) {
 	my ($pa_config, $file, $grants) = @_;
 	if ($^O !~ /win/i ) { # Only for Linux environments
@@ -351,10 +420,10 @@ sub set_file_permissions($$;$) {
 }
 
 
-########################################################################
+################################################################################
 ## SUB pandora_trash_ascii 
 # Generate random ascii strings with variable lenght
-########################################################################
+################################################################################
 
 sub pandora_trash_ascii {
 	my $config_depth = $_[0];
@@ -367,9 +436,9 @@ sub pandora_trash_ascii {
 	return $output
 }
 
-########################################################################
+################################################################################
 ## Convert the $value encode in html entity to clear char string.
-########################################################################
+################################################################################
 sub safe_input($) {
 	my $value = shift;
 
@@ -380,9 +449,9 @@ sub safe_input($) {
 	return $value;
 }
 
-########################################################################
+################################################################################
 ## Convert the html entities to value encode to rebuild char string.
-########################################################################
+################################################################################
 sub safe_output($) {
 	my $value = shift;
 
@@ -393,10 +462,10 @@ sub safe_output($) {
 	return $value;
 }
 
-########################################################################
+################################################################################
 # Sub daemonize ()
 # Put program in background (for daemon mode)
-########################################################################
+################################################################################
 
 sub pandora_daemonize {
 	my $pa_config = $_[0];
@@ -433,8 +502,35 @@ sub pandora_daemonize {
 # Pandora other General functions |
 # -------------------------------------------+
 
+################################################################################
+# SUB credential_store_get_key
+# Retrieve all information related to target identifier.
+# param1 - config hash
+# param2 - dbh link
+# param3 - string identifier
+################################################################################
+sub credential_store_get_key($$$) {
+	my ($pa_config, $dbh, $identifier) = @_;
 
-########################################################################
+	my $sql = 'SELECT * FROM tcredential_store WHERE identifier = ?';
+	my $key = PandoraFMS::DB::get_db_single_row($dbh, $sql, $identifier);
+
+	return {
+		'username' => PandoraFMS::Core::pandora_output_password(
+			$pa_config,
+			$key->{'username'}
+		),
+		'password' => PandoraFMS::Core::pandora_output_password(
+			$pa_config,
+			$key->{'password'}
+		),
+		'extra_1' => $key->{'extra_1'},
+		'extra_2' => $key->{'extra_2'},
+	};
+
+}
+
+################################################################################
 # SUB pandora_sendmail
 # Send a mail, connecting directly to MTA
 # param1 - config hash
@@ -442,7 +538,7 @@ sub pandora_daemonize {
 # param3 - Email subject
 # param4 - Email Message body
 # param4 - Email content type
-########################################################################
+################################################################################
 
 sub pandora_sendmail {
 	
@@ -466,7 +562,14 @@ sub pandora_sendmail {
 		Smtp		=> $pa_config->{"mta_address"},
 		Port		=> $pa_config->{"mta_port"},
 		From		=> $pa_config->{"mta_from"},
+		Encryption	=> $pa_config->{"mta_encryption"},
 	);
+
+	# Set the timeout.
+	$PandoraFMS::Sendmail::mailcfg{'timeout'} = $pa_config->{"tcp_timeout"};
+
+	# Enable debugging.
+	$PandoraFMS::Sendmail::mailcfg{'debug'} = $pa_config->{"verbosity"};
 	
 	if (defined($content_type)) {
 		$mail{'Content-Type'} = $content_type;
@@ -483,21 +586,18 @@ sub pandora_sendmail {
 		$mail{auth} = {user=>$pa_config->{"mta_user"}, password=>$pa_config->{"mta_pass"}, method=>$pa_config->{"mta_auth"}, required=>1 };
 	}
 
-	if (sendmail %mail) { 
-		return;
-	}
-	else {
-		logger ($pa_config, "[ERROR] Sending email to $to_address with subject $subject", 1);
-		if (defined($Mail::Sendmail::error)){
-			logger ($pa_config, "ERROR Code: $Mail::Sendmail::error", 5);
+	eval {
+		if (!sendmail(%mail)) { 
+			logger ($pa_config, "[ERROR] Sending email to $to_address with subject $subject", 1);
+			logger ($pa_config, "ERROR Code: $Mail::Sendmail::error", 5) if (defined($Mail::Sendmail::error));
 		}
-	}
+	};
 }
 
-##########################################################################
+################################################################################
 # SUB is_numeric
 # Return TRUE if given argument is numeric
-##########################################################################
+################################################################################
 
 sub is_numeric {
 	my $val = $_[0];
@@ -512,17 +612,81 @@ sub is_numeric {
 	my $SIGN   = qr{ [+-] }xms;
 	my $NUMBER = qr{ ($SIGN?) ($DIGITS) }xms;
 	if ( $val !~ /^${NUMBER}$/ ) {
-		return 0;   #Non-numeric
+		#Non-numeric, or maybe... leave looks_like_number try
+		return looks_like_number($val);
 	}
 	else {
 		return 1;   #Numeric
 	}
 }
 
-##########################################################################
+################################################################################
+# SUB is_enabled 
+# Return TRUE if given argument is defined, number and greater than 1.
+################################################################################
+sub is_enabled {
+	my $value = shift;
+	
+	if ((defined ($value)) && is_numeric($value) && ($value > 0)){
+		# return true
+		return 1;
+	}
+	#return false
+	return 0;
+
+}
+
+################################################################################
+# SUB is_empty
+# Return TRUE if given argument is an empty string/array/hash or undefined.
+################################################################################
+sub is_empty {
+	my $str = shift;
+
+	if (! (defined ($str)) ){
+		return 1;
+	}
+
+	if(looks_like_number($str)){
+		return 0;
+	}
+
+	if (ref ($str) eq "ARRAY") {
+		return (($#{$str}<0)?1:0);
+	}
+
+	if (ref ($str) eq "HASH") {
+		my @tmp = keys %{$str};
+		return (($#tmp<0)?1:0);
+	}
+
+	if ($str =~ /^\ *[\n\r]{0,2}\ *$/) {
+		return 1;
+	}
+	return 0;
+}
+
+################################################################################
+# Check if a value is in an array
+################################################################################
+sub is_in_array {
+	my ($array, $value) = @_;
+
+	if (is_empty($value)) {
+		return 0;
+	}
+
+	my %params = map { $_ => 1 } @{$array};
+	if (exists($params{$value})) {
+		return 1;
+	}
+	return 0;
+}
+
+################################################################################
 # SUB md5check (param_1, param_2)
 # Verify MD5 file .checksum
-##########################################################################
+################################################################################
 # param_1 : Name of data file
 # param_2 : Name of md5 file
 
@@ -556,10 +720,10 @@ sub md5check {
 	}
 }
 
-########################################################################
+################################################################################
 # SUB logger (pa_config, message, level)
 # Log to file
-########################################################################
+################################################################################
 sub logger ($$;$) {
 	my ($pa_config, $message, $level) = @_;
 
@@ -567,7 +731,7 @@ sub logger ($$;$) {
 	$message = safe_output ($message);
 
 	$level = 1 unless defined ($level);
-	return if ($level > $pa_config->{'verbosity'});
+	return if (!defined ($pa_config->{'verbosity'}) || $level > $pa_config->{'verbosity'});
 
 	if (!defined($pa_config->{'log_file'})) {
 		print strftime ("%Y-%m-%d %H:%M:%S", localtime()) . " [V". $level ."] " . $message . "\n";
@@ -583,27 +747,37 @@ sub logger ($$;$) {
 		# Set the security level
 		my $security_level = 'info';
 		if ($level < 2) {
-			$security = 'crit';
+			$security_level = 'crit';
 		} elsif ($level < 5) {
-			$security = 'warn';
+			$security_level = 'warn';
 		}
 
 		openlog('pandora_server', 'ndelay', 'daemon');
 		syslog($security_level, $message);
 		closelog();
 	} else {
+		# Obtain the script that invoke this log
+		my $parent_caller = "";
+		$parent_caller = ( caller(2) )[1];
+		if (defined $parent_caller) {
+			$parent_caller = (split '/', $parent_caller)[-1];
+			$parent_caller =~ s/\.[^.]+$//;
+			$parent_caller = " " . $parent_caller . ": ";
+		} else {
+			$parent_caller = " ";
+		}
 		open (FILE, ">> $file") or die "[FATAL] Could not open logfile '$file'";
 		# Get an exclusive lock on the file (LOCK_EX)
 		flock (FILE, 2);
-		print FILE strftime ("%Y-%m-%d %H:%M:%S", localtime()) . " " . (defined($pa_config->{'servername'}) ? $pa_config->{'servername'} : '') . " [V". $level ."] " . $message . "\n";
+		print FILE strftime ("%Y-%m-%d %H:%M:%S", localtime()) . $parent_caller . (defined($pa_config->{'servername'}) ? $pa_config->{'servername'} : '') . " [V". $level ."] " . $message . "\n";
 		close (FILE);
 	}
 }
 
-########################################################################
+################################################################################
 # SUB pandora_rotate_log (pa_config)
 # Log to file
-########################################################################
+################################################################################
 sub pandora_rotate_logfile ($) {
 	my ($pa_config) = @_;
 
@@ -619,9 +793,9 @@ sub pandora_rotate_logfile ($) {
 	}
 }
 
-########################################################################
+################################################################################
 # limpia_cadena (string) - Purge a string for any forbidden characters (esc, etc)
-########################################################################
+################################################################################
 sub limpia_cadena {
 	my $micadena;
 	$micadena = $_[0];
@@ -635,9 +809,9 @@ sub limpia_cadena {
 	}
 }
 
-########################################################################
+################################################################################
 # clean_blank (string) - Remove leading and trailing blanks
-########################################################################
+################################################################################
 sub clean_blank {
 	my $input = $_[0];
 	$input =~ s/^\s+//g;
@@ -645,10 +819,10 @@ sub clean_blank {
 	return $input;
 }
 
-########################################################################################
+################################################################################
 # sub sqlWrap(texto)
 # Elimina comillas y caracteres problematicos y los sustituye por equivalentes
-########################################################################################
+################################################################################
 
 sub sqlWrap {
 	my $toBeWrapped = shift(@_);
@@ -659,21 +833,21 @@ sub sqlWrap {
 	}
 }
 
-##########################################################################
+################################################################################
 # sub float_equal (num1, num2, decimals)
 # This function make possible to compare two float numbers, using only x decimals
 # in comparation.
 # Taken from Perl Cookbook, O'Reilly. Thanks, guys.
-##########################################################################
+################################################################################
 sub float_equal {
 	my ($A, $B, $dp) = @_;
 	return sprintf("%.${dp}g", $A) eq sprintf("%.${dp}g", $B);
 }
 
-##########################################################################
+################################################################################
 # Tries to load the PandoraEnterprise module. Must be called once before
 # enterprise_hook ().
-##########################################################################
+################################################################################
 sub enterprise_load ($) {
 	my $pa_config = shift;
 	
@@ -708,9 +882,9 @@ sub enterprise_load ($) {
 	return 1;
 }
 
-##########################################################################
+################################################################################
 # Tries to call a PandoraEnterprise function. Returns undef if unsuccessful.
-##########################################################################
+################################################################################
 sub enterprise_hook ($$) {
 	my $func = shift;
 	my @args = @{shift ()};
@@ -727,6 +901,11 @@ sub enterprise_hook ($$) {
 	# Try to call the function
 	my $output = eval { &$func (@args); };
 
+	# Discomment to debug.
+	if ($@) {
+		print STDERR $@;
+	}
+
 	# Check for errors
 	#return undef if ($@);
 	return '' unless defined ($output);
@@ -734,19 +913,19 @@ sub enterprise_hook ($$) {
 	return $output;
 }
 
-########################################################################
+################################################################################
 # Prints a message to STDOUT at the given log level.
-########################################################################
+################################################################################
 sub print_message ($$$) {
 	my ($pa_config, $message, $log_level) = @_;
 	
 	print STDOUT $message . "\n" if ($pa_config->{'verbosity'} >= $log_level);
 }
 
-##########################################################################
+################################################################################
 # Returns the value of an XML tag from a hash returned by XMLin (one level
 # depth).
-##########################################################################
+################################################################################
 sub get_tag_value ($$$;$) {
 	my ($hash_ref, $tag, $def_value, $all_array) = @_;
 	$all_array = 0 unless defined ($all_array);
@@ -765,10 +944,10 @@ sub get_tag_value ($$$;$) {
 	return $def_value;
 }
 
-########################################################################
+################################################################################
 # Initialize some variables needed by the MD5 algorithm.
 # See http://en.wikipedia.org/wiki/MD5#Pseudocode.
-########################################################################
+################################################################################
 my (@R, @K);
 sub md5_init () {
 	
@@ -784,10 +963,10 @@ sub md5_init () {
 	}
 }
 
-###############################################################################
+################################################################################
 # Return the MD5 checksum of the given string. 
 # Pseudocode from http://en.wikipedia.org/wiki/MD5#Pseudocode.
-###############################################################################
+################################################################################
 sub md5 ($) {
 	my $str = shift;
 
@@ -875,18 +1054,18 @@ sub md5 ($) {
 	return unpack ("H*", pack ("V", $h0)) . unpack ("H*", pack ("V", $h1)) . unpack ("H*", pack ("V", $h2)) . unpack ("H*", pack ("V", $h3));
 }
 
-###############################################################################
+################################################################################
 # MD5 leftrotate function. See http://en.wikipedia.org/wiki/MD5#Pseudocode.
-###############################################################################
+################################################################################
 sub leftrotate ($$) {
 	my ($x, $c) = @_;
 
 	return (0xFFFFFFFF & ($x << $c)) | ($x >> (32 - $c));
 }
 
-##########################################################################
+################################################################################
 ## Convert a date (yyy-mm-ddThh:ii:ss) to Timestamp.
-##########################################################################
+################################################################################
 sub dateTimeToTimestamp {
 	$_[0] =~ /(\d{4})-(\d{2})-(\d{2})([ |T])(\d{2}):(\d{2}):(\d{2})/;
 	my($year, $mon, $day, $GMT, $hour, $min, $sec) = ($1, $2, $3, $4, $5, $6, $7);
@@ -896,10 +1075,10 @@ sub dateTimeToTimestamp {
 	#print "BST\t" . mktime($sec, $min, $hour, $day, $mon - 1, $year - 1900, 0, 0) . "\n";
 }
 
-##############################################################################
+################################################################################
 # Below some "internal" functions for automonitoring feature
 # TODO: Implement the same for other systems like Solaris or BSD
-##############################################################################
+################################################################################
 
 sub disk_free ($) {
 	my $target = $_[0];
@@ -937,7 +1116,8 @@ sub load_average {
 		$load_average = ((split(/\s+/, `/sbin/sysctl -n vm.loadavg`))[1]);
 	} elsif ($OSNAME eq "MSWin32") {
 		# Windows hasn't got load average.
-		$load_average = undef;
+		$load_average = `powershell "(Get-WmiObject win32_processor | Measure-Object -property LoadPercentage -Average).average"`;
+		chop($load_average);
 	}
 	# by default LINUX calls
 	else {
@@ -975,10 +1155,10 @@ sub free_mem {
 	return $free_mem;
 }
 
-##########################################################################
+################################################################################
 ## SUB ticks_totime
 	# Transform a snmp timeticks count in a date
-##########################################################################
+################################################################################
 
 sub ticks_totime ($){
 
@@ -1002,7 +1182,7 @@ sub ticks_totime ($){
 	return "$days days, $hours hours, $minutes minutes, $seconds seconds";
 }
 
-##############################################################################
+################################################################################
 =head2 C<< pandora_ping (I<$pa_config>, I<$host>) >> 
 
 Ping the given host. 
@@ -1011,7 +1191,7 @@ Returns:
  0 otherwise.
 
 =cut
-##############################################################################
+################################################################################
 sub pandora_ping ($$$$) {
 	my ($pa_config, $host, $timeout, $retries) = @_;
 	
@@ -1129,13 +1309,13 @@ sub pandora_ping ($$$$) {
 	return $output;
 }
 
-########################################################################
+################################################################################
 =head2 C<< pandora_ping_latency (I<$pa_config>, I<$host>) >> 
 
 Ping the given host. Returns the average round-trip time. Returns undef if fails.
 
 =cut
-########################################################################
+################################################################################
 sub pandora_ping_latency ($$$$) {
 	my ($pa_config, $host, $timeout, $retries) = @_;
 
@@ -1268,14 +1448,120 @@ sub pandora_ping_latency ($$$$) {
 	return $output;
 }
 
-########################################################################
+################################################################################
+=head2 C<< pandora_block_ping (I<$pa_config>, I<$hosts>) >> 
+
+Ping all given hosts. Returns an array with all hosts detected as alive.
+
+=cut
+################################################################################
+sub pandora_block_ping($@) {
+	my ($pa_config, @hosts) = @_;
+	my ($cmd, $output);
+
+	return () if is_empty(@hosts);
+
+	if (-x $pa_config->{'fping'}) {
+		# fping timeout in milliseconds
+		$cmd = '"'.$pa_config->{'fping'} . '" -a -q -t ' . (1000 * $pa_config->{'networktimeout'}) . " " . (join (' ', @hosts));
+		@output = `$cmd 2>$DEVNULL`;
+	} else {
+		# Ping scan
+		foreach my $host (@hosts) {
+			if (ping($pa_config, $host) > 0) {
+				push @output, $host;
+			}
+		}
+	}
+
+	return @output;
+}
+
+################################################################################
+=head2 C<< ping (I<$pa_config>, I<$hosts>) >> 
+
+Ping the given host. Returns 1 if the host is alive, 0 otherwise.
+
+=cut
+################################################################################
+sub ping ($$) {
+	my ($pa_config, $host) = @_;
+	my ($timeout, $retries, $packets) = (
+		$pa_config->{'networktimeout'},
+		$pa_config->{'icmp_checks'},
+		1
+	);
+
+	# Windows
+	if (($^O eq "MSWin32") || ($^O eq "MSWin32-x64") || ($^O eq "cygwin")){
+		$timeout *= 1000; # Convert the timeout to milliseconds.
+		for (my $i = 0; $i < $retries; $i++) {
+			my $output = `ping -n $packets -w $timeout $host`;
+			return 1 if ($output =~ /TTL/);
+		}
+
+		return 0;
+	}
+
+	# Solaris
+	if ($^O eq "solaris"){
+		my $ping_command = $host =~ /\d+:|:\d+/ ? "ping -A inet6" : "ping";
+		for (my $i = 0; $i < $retries; $i++) {
+
+			# Note: There is no timeout option.
+			`$ping_command -s -n $host 56 $packets >$DEVNULL 2>&1`;
+			return 1 if ($? == 0);
+		}
+
+		return 0;
+	}
+
+	# FreeBSD
+	if ($^O eq "freebsd"){
+		my $ping_command = $host =~ /\d+:|:\d+/ ? "ping6" : "ping -t $timeout";
+		for (my $i = 0; $i < $retries; $i++) {
+
+			# Note: There is no timeout option for ping6.
+			`$ping_command -q -n -c $packets $host >$DEVNULL 2>&1`;
+			return 1 if ($? == 0);
+		}
+
+		return 0;
+	}
+
+	# NetBSD
+	if ($^O eq "netbsd"){
+		my $ping_command = $host =~ /\d+:|:\d+/ ? "ping6" : "ping -w $timeout";
+		for (my $i = 0; $i < $retries; $i++) {
+
+			# Note: There is no timeout option for ping6.
+			`$ping_command -q -n -c $packets $host >$DEVNULL 2>&1`;
+			if ($? == 0) {
+				return 1;
+			}
+		}
+
+		return 0;
+	}
+
+	# Assume Linux by default.
+	my $ping_command = $host =~ /\d+:|:\d+/ ? "ping6" : "ping";
+	for (my $i = 0; $i < $retries; $i++) {
+		`$ping_command -q -W $timeout -n -c $packets $host >$DEVNULL 2>&1`;
+		return 1 if ($? == 0);
+	}
+
+	return 0;
+}
+
+################################################################################
 =head2 C<< month_have_days (I<$month>, I<$year>) >> 
 
 Pass a $month (as january 0 number and each month with numbers) and the year
 as number (for example 1981). And return the days of this month.
 
 =cut
-########################################################################
+################################################################################
 sub month_have_days($$) {
 	my $month= shift(@_);
 	my $year= @_ ? shift(@_) : (1900 + (localtime())[5]);
@@ -1303,9 +1589,9 @@ sub month_have_days($$) {
 	return $monthDays[$month];
 }
 
-###############################################################################
+################################################################################
 # Convert a text obj tag to an OID and update the module configuration.
-###############################################################################
+################################################################################
 sub translate_obj ($$$) {
 	my ($pa_config, $dbh, $obj) = @_;
 
@@ -1323,9 +1609,9 @@ sub translate_obj ($$$) {
 	return $oid;
 }
 
-###############################################################################
+################################################################################
 # Get the number of seconds left to the next execution of the given cron entry.
-###############################################################################
+################################################################################
 sub cron_next_execution {
 	my ($cron, $interval) = @_;
 
@@ -1335,58 +1621,64 @@ sub cron_next_execution {
 	}
 
 	# Get day of the week and month from cron config
-	my ($mday, $wday) = (split (/\s/, $cron))[2, 4];
+	my ($wday) = (split (/\s/, $cron))[4];
+	# Check the wday values to avoid infinite loop
+	my ($wday_down, $wday_up) = cron_get_interval($wday);
+	if ($wday_down ne "*" && ($wday_down > 6 || (defined($wday_up) && $wday_up > 6))) {
+		$wday = "*";
+	}
 
 	# Get current time and day of the week
 	my $cur_time = time();
 	my $cur_wday = (localtime ($cur_time))[6];
 
-	# Any day of the week
-	if ($wday eq '*') {
-		my $nex_time = cron_next_execution_date ($cron,  $cur_time, $interval);
-		return $nex_time - time();
-	}
-	# A range?
-	else {
-		$wday = cron_get_closest_in_range ($cur_wday, $wday);
+	my $nex_time = cron_next_execution_date ($cron, $cur_time, $interval);
+
+	# Check the day
+	while (!cron_check_interval($wday, (localtime ($nex_time))[6])) {
+		# If it does not acomplish the day of the week, go to the next day.
+		$nex_time += 86400;
+		$nex_time = cron_next_execution_date ($cron, $nex_time, 0);
 	}
 
-	# A specific day of the week
-	my $count = 0;
-	my $nex_time = $cur_time;
-	do {
-		$nex_time = cron_next_execution_date ($cron, $nex_time, $interval);
-		my $nex_time_wd = $nex_time;
-		my ($nex_mon, $nex_wday) = (localtime ($nex_time_wd))[4, 6];
-		my $nex_mon_wd;
-		do {
-			# Check the day of the week
-			if ($nex_wday == $wday) {
-				return $nex_time_wd - time();
-			}
-			
-			# Move to the next day of the month
-			$nex_time_wd += 86400;
-			($nex_mon_wd, $nex_wday) = (localtime ($nex_time_wd))[4, 6];
-		} while ($mday eq '*' && $nex_mon_wd == $nex_mon);
-		$count++;
-	} while ($count < 60);
-
-	# Something went wrong, default to 5 minutes
-	return $interval;
+	return $nex_time - $cur_time;
 }
-###############################################################################
+################################################################################
 # Get the number of seconds left to the next execution of the given cron entry.
-###############################################################################
+################################################################################
 sub cron_check_syntax ($) {
 	my ($cron) = @_;
 	
 	return 0 if !defined ($cron);
 	return ($cron =~ m/^(\d|\*|-)+ (\d|\*|-)+ (\d|\*|-)+ (\d|\*|-)+ (\d|\*|-)+$/);
 }
-###############################################################################
+################################################################################
+# Check if a value is inside an interval.
+################################################################################
+sub cron_check_interval {
+	my ($elem_cron, $elem_curr_time) = @_;
+
+	# Return 1 if wildcard.
+	return 1 if ($elem_cron eq "*");
+
+	my ($down, $up) = cron_get_interval($elem_cron);
+	# Check if it is not a range
+	if (!defined($up)) {
+		return ($down == $elem_curr_time) ? 1 : 0;
+	}
+
+	# Check if it is on the range
+	if ($down < $up) {
+		return 0 if ($elem_curr_time < $down || $elem_curr_time > $up);
+	} else {
+		return 0 if ($elem_curr_time < $down && $elem_curr_time > $up);
+	}
+
+	return 1;
+}
+################################################################################
 # Get the next execution date for the given cron entry in seconds since epoch.
-###############################################################################
+################################################################################
 sub cron_next_execution_date {
 	my ($cron, $cur_time, $interval) = @_;
 
@@ -1421,8 +1713,7 @@ sub cron_next_execution_date {
 	my @nex_time_array = @curr_time_array;
 
 	# Update minutes
-	my ($min_down, undef) = cron_get_interval ($min);
-	$nex_time_array[0] = ($min_down eq '*') ? 0 : $min_down;
+	$nex_time_array[0] = cron_get_next_time_element($min);
 
 	$nex_time = cron_valid_date(@nex_time_array, $cur_year);
 	if ($nex_time >= $cur_time) {
@@ -1455,8 +1746,7 @@ sub cron_next_execution_date {
 	return $nex_time if cron_is_in_cron(\@cron_array, \@nex_time_array);
 
 	#Update the hour if fails
-	my ($hour_down, undef) = cron_get_interval ($hour);
-	$nex_time_array[1] = ($hour_down eq '*') ? 0 : $hour_down;
+	$nex_time_array[1] = cron_get_next_time_element($hour);
 
 	# When an overflow is passed check the hour update again
 	$nex_time = cron_valid_date(@nex_time_array, $cur_year);
@@ -1483,8 +1773,7 @@ sub cron_next_execution_date {
 	return $nex_time if cron_is_in_cron(\@cron_array, \@nex_time_array);
 	
 	#Update the day if fails
-	my ($mday_down, undef) = cron_get_interval ($mday);
-	$nex_time_array[2] = ($mday_down eq '*') ? 1 : $mday_down;
+	$nex_time_array[2] = cron_get_next_time_element($mday, 1);
 
 	# When an overflow is passed check the hour update in the next execution
 	$nex_time = cron_valid_date(@nex_time_array, $cur_year);
@@ -1506,8 +1795,7 @@ sub cron_next_execution_date {
 	return $nex_time if cron_is_in_cron(\@cron_array, \@nex_time_array);
 
 	#Update the month if fails
-	my ($mon_down, undef) = cron_get_interval ($mon);
-	$nex_time_array[3] = ($mon_down eq '*') ? 0 : $mon_down;
+	$nex_time_array[3] = cron_get_next_time_element($mon);
 
 	# When an overflow is passed check the hour update in the next execution
 	$nex_time = cron_valid_date(@nex_time_array, $cur_year);
@@ -1519,11 +1807,11 @@ sub cron_next_execution_date {
 
 	return $nex_time;
 }
-###############################################################################
+################################################################################
 # Returns if a date is in a cron. Recursive.
 # Needs the cron like an array reference and
 # current time in cron format to works properly
-###############################################################################
+################################################################################
 sub cron_is_in_cron {
 	my ($elems_cron, $elems_curr_time) = @_;
 
@@ -1536,27 +1824,35 @@ sub cron_is_in_cron {
 	#If there is no elements means that is in cron
 	return 1 unless (defined($elem_cron) || defined($elem_curr_time));
 
-	# Go to last element if current is a wild card
-	if ($elem_cron ne '*') {
-		my ($down, $up) = cron_get_interval($elem_cron);
-		# Check if there is no a range
-		return 0 if (!defined($up) && ($down != $elem_curr_time));
-		# Check if there is on the range
-		if (defined($up)) {
-			if ($down < $up) {
-				return 0 if ($elem_curr_time < $down || $elem_curr_time > $up);
-			} else {
-				return 0 if ($elem_curr_time > $down || $elem_curr_time < $up);
-			}
-		}
-	}
+	# Check the element interval
+	return 0 unless (cron_check_interval($elem_cron, $elem_curr_time));
+
 	return cron_is_in_cron(\@deref_elems_cron, \@deref_elems_curr_time);
 }
-###############################################################################
+################################################################################
+#Get the next tentative time for a cron value or interval in case of overflow.
+#Floor data is the minimum localtime data for a position. Ex: 
+#Ex:
+#     * should returns floor data.
+#     5 should returns 5.
+#     10-55 should returns 10.
+#     55-10 should retunrs elem_down.
+################################################################################
+sub cron_get_next_time_element {
+	# Default floor data is 0
+	my ($curr_element, $floor_data) = @_;
+	$floor_data = 0 unless defined($floor_data);
+
+	my ($elem_down, $elem_up) = cron_get_interval ($curr_element);
+	return ($elem_down eq '*')
+		? $floor_data
+		: $elem_down;
+}
+################################################################################
 # Returns the interval of a cron element. If there is not a range,
 # returns an array with the first element in the first place of array
 # and the second place undefined.
-###############################################################################
+################################################################################
 sub cron_get_interval {
 	my ($element) = @_;
 
@@ -1567,10 +1863,10 @@ sub cron_get_interval {
 	
 	return ($1, $2);
 }
-###############################################################################
+################################################################################
 # Returns the closest number to the target inside the given range (including
 # the target itself).
-###############################################################################
+################################################################################
 sub cron_get_closest_in_range ($$) {
 	my ($target, $range) = @_;
 
@@ -1592,15 +1888,15 @@ sub cron_get_closest_in_range ($$) {
 	return $target;
 }
 
-###############################################################################
+################################################################################
 # Check if a date is valid to get timelocal
-###############################################################################
+################################################################################
 sub cron_valid_date {
 	my ($min, $hour, $mday, $month, $year) = @_;
 	my $utime;
 	eval {
 		local $SIG{__DIE__} = sub {};
-		$utime = timelocal(0, $min, $hour, $mday, $month, $year);
+		$utime = strftime("%s", 0, $min, $hour, $mday, $month, $year);
 	};
 	if ($@) {
 		return 0;
@@ -1608,9 +1904,9 @@ sub cron_valid_date {
 	return $utime;
 }
 
-###############################################################################
+################################################################################
 # Attempt to resolve the given hostname.
-###############################################################################
+################################################################################
 sub resolve_hostname ($) {
 	my ($hostname) = @_;
 	
@@ -1620,9 +1916,9 @@ sub resolve_hostname ($) {
 	return inet_ntoa($resolved_hostname);
 }
 
-###############################################################################
+################################################################################
 # Returns 1 if the given regular expression is valid, 0 otherwise.
-###############################################################################
+################################################################################
 sub valid_regex ($) {
 	my $regex = shift;
 	
@@ -1638,9 +1934,9 @@ sub valid_regex ($) {
 	return 1;
 }
 
-###############################################################################
+################################################################################
 # Returns 1 if a valid metaconsole license is configured, 0 otherwise.
-###############################################################################
+################################################################################
 sub is_metaconsole ($) {
 	my ($pa_config) = @_;
 
@@ -1653,9 +1949,9 @@ sub is_metaconsole ($) {
 	return 0;
 }
 
-###############################################################################
+################################################################################
 # Returns 1 if a valid offline license is configured, 0 otherwise.
-###############################################################################
+################################################################################
 sub is_offline ($) {
 	my ($pa_config) = @_;
 
@@ -1667,9 +1963,9 @@ sub is_offline ($) {
 	return 0;
 }
 
-###############################################################################
+################################################################################
 # Check if a given variable contents a number
-###############################################################################
+################################################################################
 sub to_number($) {
 	my $n = shift;
 	if ($n =~ /[\d+,]*\d+\.\d+/) {
@@ -1750,7 +2046,7 @@ sub api_call_url {
 	
 
 	my $ua = LWP::UserAgent->new();
-	$ua->timeout($options->{lwp_timeout});
+	$ua->timeout($pa_config->{'tcp_timeout'});
 	# Enable environmental proxy settings
 	$ua->env_proxy;
 	# Enable in-memory cookie management
@@ -1807,14 +2103,306 @@ sub stop_server_threads {
 	$THRRUN = 0;
 
 	foreach my $thr (@ServerThreads) {
-			$thr->detach();
+			$thr->join();
 	}
 
 	@ServerThreads = ();
 }
 
+################################################################################
+# Generate random hash as agent name.
+################################################################################
+sub generate_agent_name_hash {
+	my ($agent_alias, $server_ip) = @_;
+	return sha256(join('|', ($agent_alias, $server_ip, time(), sprintf("%04d", rand(10000)))));
+}
+
+################################################################################
+# Return the SHA256 checksum of the given string as a hex string.
+# Pseudocode from: http://en.wikipedia.org/wiki/SHA-2#Pseudocode
+################################################################################
+my @K2 = (
+	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+	0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+	0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+	0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+	0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+	0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+	0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+	0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+	0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+	0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+);
+sub sha256 {
+	my $str = shift;
+
+	# No input!
+	if (!defined($str)) {
+		return "";
+	}
+
+	# Note: All variables are unsigned 32 bits and wrap modulo 2^32 when
+	# calculating.
+
+	# First 32 bits of the fractional parts of the square roots of the first 8
+	# primes.
+	my $h0 = 0x6a09e667;
+	my $h1 = 0xbb67ae85;
+	my $h2 = 0x3c6ef372;
+	my $h3 = 0xa54ff53a;
+	my $h4 = 0x510e527f;
+	my $h5 = 0x9b05688c;
+	my $h6 = 0x1f83d9ab;
+	my $h7 = 0x5be0cd19;
+
+	# Pre-processing.
+	my $msg = unpack ("B*", pack ("A*", $str));
+	my $bit_len = length ($msg);
+
+	# Append "1" bit to message.
+	$msg .= '1';
+
+	# Append "0" bits until message length in bits = 448 (mod 512).
+	$msg .= '0' while ((length ($msg) % 512) != 448);
+
+	# Append bit /* bit, not byte */ length of unpadded message as 64-bit
+	# big-endian integer to message.
+	$msg .= unpack ("B32", pack ("N", $bit_len >> 32));
+	$msg .= unpack ("B32", pack ("N", $bit_len));
+
+	# Process the message in successive 512-bit chunks.
+	for (my $i = 0; $i < length ($msg); $i += 512) {
+
+		my @w;
+		my $chunk = substr ($msg, $i, 512);
+
+		# Break chunk into sixteen 32-bit big-endian words.
+		for (my $j = 0; $j < length ($chunk); $j += 32) {
+			push (@w, unpack ("N", pack ("B32", substr ($chunk, $j, 32))));
+		}
+
+		# Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
+		for (my $i = 16; $i < 64; $i++) {
+			my $s0 = rightrotate($w[$i - 15], 7) ^ rightrotate($w[$i - 15], 18) ^ ($w[$i - 15] >> 3);
+			my $s1 = rightrotate($w[$i - 2], 17) ^ rightrotate($w[$i - 2], 19) ^ ($w[$i - 2] >> 10);
+			$w[$i] = ($w[$i - 16] + $s0 + $w[$i - 7] + $s1) % POW232;
+		}
+
+		# Initialize working variables to current hash value.
+		my $a = $h0;
+		my $b = $h1;
+		my $c = $h2;
+		my $d = $h3;
+		my $e = $h4;
+		my $f = $h5;
+		my $g = $h6;
+		my $h = $h7;
+
+		# Compression function main loop.
+		for (my $i = 0; $i < 64; $i++) {
+			my $S1 = rightrotate($e, 6) ^ rightrotate($e, 11) ^ rightrotate($e, 25);
+			my $ch = ($e & $f) ^ ((0xFFFFFFFF & (~ $e)) & $g);
+			my $temp1 = ($h + $S1 + $ch + $K2[$i] + $w[$i]) % POW232;
+			my $S0 = rightrotate($a, 2) ^ rightrotate($a, 13) ^ rightrotate($a, 22);
+			my $maj = ($a & $b) ^ ($a & $c) ^ ($b & $c);
+			my $temp2 = ($S0 + $maj) % POW232;
+
+			$h = $g;
+			$g = $f;
+			$f = $e;
+			$e = ($d + $temp1) % POW232;
+			$d = $c;
+			$c = $b;
+			$b = $a;
+			$a = ($temp1 + $temp2) % POW232;
+		}
+
+		# Add the compressed chunk to the current hash value.
+		$h0 = ($h0 + $a) % POW232;
+		$h1 = ($h1 + $b) % POW232;
+		$h2 = ($h2 + $c) % POW232;
+		$h3 = ($h3 + $d) % POW232;
+		$h4 = ($h4 + $e) % POW232;
+		$h5 = ($h5 + $f) % POW232;
+		$h6 = ($h6 + $g) % POW232;
+		$h7 = ($h7 + $h) % POW232;
+	}
+
+	# Produce the final hash value (big-endian).
+	return unpack ("H*", pack ("N", $h0)) .
+	       unpack ("H*", pack ("N", $h1)) .
+	       unpack ("H*", pack ("N", $h2)) .
+	       unpack ("H*", pack ("N", $h3)) .
+	       unpack ("H*", pack ("N", $h4)) .
+	       unpack ("H*", pack ("N", $h5)) .
+	       unpack ("H*", pack ("N", $h6)) .
+	       unpack ("H*", pack ("N", $h7));
+}
+
+################################################################################
+# Rotate a 32-bit number a number of bits to the right.
+################################################################################
+sub rightrotate {
+	my ($x, $c) = @_;
+
+	return (0xFFFFFFFF & ($x << (32 - $c))) | ($x >> $c);
+}
+
+################################################################################
+# Returns IP address(v4) in longint format
+################################################################################
+sub ip_to_long($) {
+	my $ip_str = shift;
+	return unpack "N", inet_aton($ip_str);
+}
+
+################################################################################
+# Returns IP address(v4) in longint format
+################################################################################
+sub long_to_ip {
+	my $ip_long = shift;
+	return inet_ntoa pack("N", ($ip_long));
+}
+
+################################################################################
+# Returns a list with enabled servers.
+################################################################################
+sub get_enabled_servers {
+	my $conf = shift;
+
+	if (ref($conf) ne "HASH") {
+		return ();
+	}
+
+	my @server_list = map {
+		if ($_ =~ /server$/i && $conf->{$_} > 0) {
+			$_
+		} else {
+		}
+	} keys %{$conf};
+
+	return @server_list;
+}
 # End of function declaration
 # End of defined Code
+
+
+################################################################################
+# Initialize a LWP::User agent
+################################################################################
+sub get_user_agent {
+	my $pa_config = shift;
+	my $ua;
+
+	eval {
+		if (!(defined($pa_config->{'lwp_timeout'})
+			&& is_numeric($pa_config->{'lwp_timeout'}))
+		) {
+			$pa_config->{'lwp_timeout'} = 3;
+		}
+
+		$ua = LWP::UserAgent->new(
+			'keep_alive' => "10"
+		);
+
+		# Configure LWP timeout.
+		$ua->timeout($pa_config->{'lwp_timeout'});
+
+		# Enable environmental proxy settings
+		$ua->env_proxy;
+
+		# Enable in-memory cookie management
+		$ua->cookie_jar( {} );
+
+		if (!defined($pa_config->{'ssl_verify'})
+			|| (defined($pa_config->{'ssl_verify'})
+				&& $pa_config->{'ssl_verify'} eq "0")
+		) {
+			# Disable verify host certificate (only needed for self-signed cert)
+			$ua->ssl_opts( 'verify_hostname' => 0 );
+			$ua->ssl_opts( 'SSL_verify_mode' => 0x00 );
+
+			# Disable library extra checks 
+			BEGIN {
+				$ENV{PERL_NET_HTTPS_SSL_SOCKET_CLASS} = "Net::SSL";
+				$ENV{PERL_LWP_SSL_VERIFY_HOSTNAME} = 0;
+			}
+		}
+	};
+	if($@) {
+		logger($pa_config, 'Failed to initialize LWP::UserAgent', 5);
+		# Failed
+		return;
+	}
+
+	return $ua;
+}
+
+################################################################################
+# Returns 'valid' url relative to current pandora_console installation.
+################################################################################
+sub ui_get_full_url {
+	my ($pa_config, $url) = @_;
+
+	if (is_empty($pa_config->{'console_api_url'})) {
+		# Do not relativize if console_api_url is empty.
+		return $url;
+	}
+
+	my $console_url = $pa_config->{'console_api_url'};
+
+	$console_url =~ s/include\/api.php$//;
+
+	return $console_url.$url;
+
+}
+
+################################################################################
+# Encodes a json.
+################################################################################
+sub p_encode_json {
+	my ($pa_config, $data) = @_;
+
+	# Initialize JSON manager.
+	my $json = JSON->new->allow_nonref;
+	my $encoded_data;
+
+	eval {
+		local $SIG{__DIE__};
+		if ($JSON::VERSION > 2.90) {
+			$encoded_data = $json->encode($data);	
+		} else {
+			$encoded_data = encode_utf8($json->encode($data));
+		}
+	};
+	if ($@){
+		if (defined($data)) {
+			logger($pa_config, 'Failed to encode data: '.$@, 5);
+		}
+	}
+
+	return $encoded_data;
+}
+
+################################################################################
+# Dencodes a json.
+################################################################################
+sub p_decode_json {
+	my ($pa_config, $data) = @_;
+	my $decoded_data;
+	
+	if ($JSON::VERSION > 2.90) {
+		# Initialize JSON manager.
+		my $json = JSON->new->allow_nonref;
+		$decoded_data = $json->decode($data);
+	} else {
+		$decoded_data = decode_json($data);
+	}
+
+	return $decoded_data;
+}
+
 
 1;
 __END__

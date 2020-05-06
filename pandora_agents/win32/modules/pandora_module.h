@@ -176,6 +176,7 @@ namespace Pandora_Modules {
 		string                unit, custom_id, str_warning, str_critical;
 		string 		          module_group, warning_inverse, critical_inverse, quiet;
 		string                module_ff_interval, module_alert_template, module_crontab;
+		string                module_ff_type;
 		string                critical_instructions, warning_instructions, unknown_instructions, tags;
 
 	protected:
@@ -233,6 +234,8 @@ namespace Pandora_Modules {
 		int          getTimeout    ();
 		string       getSave ();
 		bool         getAsync ();
+		void         setExecutions(long executions=0);
+		long         getExecutions();
 
 		virtual string getXml      ();
 
@@ -277,6 +280,7 @@ namespace Pandora_Modules {
 		void        setWarningInverse  (string value);
 		void        setQuiet       (string value);
 		void        setModuleFFInterval  (string value);
+		void        setModuleFFType  (string value);
 		void        setModuleAlertTemplate  (string value);
 		void        setModuleCrontab  (string value);
 		
@@ -299,6 +303,7 @@ namespace Pandora_Modules {
 		time_t      getTimestamp ();
 		void        setIntensiveMatch (unsigned char intensive_match);
 		unsigned char getIntensiveMatch ();
+		bool        isIntensive ();
 
 	};
 }

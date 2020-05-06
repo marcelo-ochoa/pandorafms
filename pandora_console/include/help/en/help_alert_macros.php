@@ -33,10 +33,11 @@ Besides the defined module macros, the following macros are available:
 <li>_data_: Module data that caused the alert to fire.</li>
 <li>_email_tag_: Emails associated to the module’s tags.</li>
 <li>_event_cfX_: (Only event alerts) Key of the event custom field that fired the alert. For example, if there is a custom field whose key is IPAM, its value can be obtained using the _event_cfIPAM_ macro.</li>
-<li>_event_description_: (Only event alerts) The textual description of the <?php echo get_product_name();?> event.</li>
+<li>_event_description_: (Only event alerts) The textual description of the <?php echo get_product_name(); ?> event.</li>
 <li>_event_extra_id_: (Only event alerts) Extra id.</li>
 <li>_event_id_: (Only event alerts) ID of the event that triggered the alert.</li>
 <li>_event_text_severity_: (Only event alerts) Event text severity (Maintenance, Informational, Normal Minor, Warning, Major, Critical).</li>
+<li>_eventTimestamp_: Timestamp in which the event was created.</li>
 <li>_field1_: User defined field 1.</li>
 <li>_field2_: User defined field 2.</li>
 <li>_field3_: User defined field 3.</li>
@@ -56,7 +57,7 @@ Besides the defined module macros, the following macros are available:
 <li>_groupcustomid_: Group custom ID.</li>
 <li>_groupother_: Other information about the group. Configured when the group is created.</li>
 <li>_homeurl_ : It is a link of the public URL this must be configured in the general options of the setup.</li>
-<li>_id_agent_: Agent’s ID, useful for building a direct URL that redirects to a <?php echo get_product_name();?> console webpage.</li>
+<li>_id_agent_: Agent’s ID, useful for building a direct URL that redirects to a <?php echo get_product_name(); ?> console webpage.</li>
 <li>_id_alert_: Alert’s numeric ID (unique), used to correlate the alert with third party software.</li>
 <li>_id_group_ : Agent group ID.</li>
 <li>_id_module_: Module ID.</li>
@@ -76,6 +77,7 @@ Besides the defined module macros, the following macros are available:
 <li>_policy_: Name of the policy that the module belongs to (if applies).</li>
 <li>_prevdata_: Module previous data before the alert has been triggered.</li>
 <li>_rca_: Root cause analysis chain (only for services).</li>
+<li>_secondarygroups_: List of all secondary groups of the agent.</li>
 <li>_server_ip_: Ip of server assigned to agent. </li>
 <li>_server_name_: Name of server assigned to agent. </li>
 <li>_target_ip_: IP address for the module’s target.</li>

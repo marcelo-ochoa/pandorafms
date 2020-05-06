@@ -78,6 +78,7 @@ Pandora_Module::Pandora_Module (string name) {
 	this->warning_inverse = "";
 	this->quiet = "";
 	this->module_ff_interval = "";
+	this->module_ff_type = "";
 	this->module_alert_template = "";
 	this->module_crontab = "";
 }
@@ -733,6 +734,13 @@ Pandora_Module::getXml () {
 		module_xml += this->module_ff_interval;
 		module_xml += "</module_ff_interval>\n";
 	}
+
+	/* Module FF type */
+	if (this->module_ff_type != "") {
+		module_xml += "\t<ff_type>";
+		module_xml += this->module_ff_type;
+		module_xml += "</ff_type>\n";
+	}
 	
 	/* Module Alert template */
 	if (this->module_alert_template != "") {
@@ -1026,6 +1034,16 @@ Pandora_Module::setQuiet (string value) {
 void
 Pandora_Module::setModuleFFInterval (string value) {
 	this->module_ff_interval = value;
+}
+
+/** 
+ * Set the module FF type for the module.
+ *
+ * @param value module FF type value to set.
+ */
+void
+Pandora_Module::setModuleFFType (string value) {
+	this->module_ff_type = value;
 }
 
 /** 
@@ -1404,48 +1422,48 @@ Pandora_Module::evaluatePreconditions () {
 							buffer[read] = '\0';
 							output += (char *) buffer;
 					}
-				
-				try {
-					double_output = Pandora_Strutils::strtodouble (output);
-				} catch (Pandora_Strutils::Invalid_Conversion e) {
-					double_output = 0;
+
+					try {
+						double_output = Pandora_Strutils::strtodouble (output);
+					} catch (Pandora_Strutils::Invalid_Conversion e) {
+						double_output = 0;
+					}
+		
+					if (dwRet == WAIT_OBJECT_0) { 
+						break;
+					} else if(this->getTimeout() < GetTickCount() - tickbase) {
+						/* STILL_ACTIVE */
+						TerminateProcess(pi.hThread, STILL_ACTIVE);
+						pandoraLog ("evaluatePreconditions: %s timed out (retcode: %d)", this->module_name.c_str (), STILL_ACTIVE);
+						break;
+					}
 				}
 	
-				if (dwRet == WAIT_OBJECT_0) { 
-					break;
-				} else if(this->getTimeout() < GetTickCount() - tickbase) {
-					/* STILL_ACTIVE */
-					TerminateProcess(pi.hThread, STILL_ACTIVE);
-					pandoraLog ("evaluatePreconditions: %s timed out (retcode: %d)", this->module_name.c_str (), STILL_ACTIVE);
-					break;
+				GetExitCodeProcess (pi.hProcess, &retval);
+		
+				if (retval != 0) {
+					if (! TerminateJobObject (job, 0)) {
+						pandoraLog ("evaluatePreconditions: TerminateJobObject failed. (error %d)",
+						GetLastError ());
+					}
+					if (retval != STILL_ACTIVE) {
+						pandoraLog ("evaluatePreconditions: %s did not executed well (retcode: %d)",
+						this->module_name.c_str (), retval);
+					}
+					/* Close job, process and thread handles. */
+					CloseHandle (job);
+					CloseHandle (pi.hProcess);
+					CloseHandle (pi.hThread);
+					CloseHandle (new_stdout);
+					CloseHandle (out_read);
+					return 0;
 				}
-			}
-	
-			GetExitCodeProcess (pi.hProcess, &retval);
-	
-			if (retval != 0) {
-				if (! TerminateJobObject (job, 0)) {
-					pandoraLog ("evaluatePreconditions: TerminateJobObject failed. (error %d)",
-					GetLastError ());
-				}
-	            if (retval != STILL_ACTIVE) {
-					pandoraLog ("evaluatePreconditions: %s did not executed well (retcode: %d)",
-	                this->module_name.c_str (), retval);
-	            }
+			
 				/* Close job, process and thread handles. */
 				CloseHandle (job);
 				CloseHandle (pi.hProcess);
 				CloseHandle (pi.hThread);
-				CloseHandle (new_stdout);
-				CloseHandle (out_read);
-				return 0;
 			}
-		
-			/* Close job, process and thread handles. */
-			CloseHandle (job);
-			CloseHandle (pi.hProcess);
-			CloseHandle (pi.hThread);
-		}
 
 			CloseHandle (new_stdout);
 			CloseHandle (out_read);
@@ -1675,4 +1693,32 @@ Pandora_Module::getAsync () {
 	return this->async;
 }
 					
+/**
+ * Get current exections
+ */
+long
+Pandora_Module::getExecutions () {
+	return this->executions;
+}
 
+/**
+ * Set current execution (global) used for brokers.
+ */
+void
+Pandora_Module::setExecutions (long executions) {
+	this->executions = executions;
+}
+
+/** 
+ * Checks if the module has intensive conditions.
+ * 
+ * @return true if the module's intensive condition list is not empty, false if it is.
+ */
+bool
+Pandora_Module::isIntensive () {
+	if (this->intensive_condition_list == NULL || this->intensive_condition_list->size () <= 0) {
+		return false;
+	}
+
+	return true;
+}

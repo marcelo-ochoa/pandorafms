@@ -2,8 +2,8 @@
 # Pandora FMS Console
 #
 %define name        pandorafms_console
-%define version     7.0NG.729
-%define release     181205
+%define version     7.0NG.745
+%define release     200506
 
 # User and Group under which Apache is running
 %define httpd_name  httpd
@@ -26,7 +26,7 @@ BuildRoot:          %{_tmppath}/%{name}
 BuildArch:          noarch
 AutoReq:            0
 Requires:           %{httpd_name} >= 2.0.0
-Requires:           mod_php >= 5.2.0
+Requires:           mod_php >= 7.0
 Requires:           php-gd, php-ldap, php-snmp, php-session, php-gettext
 Requires:           php-mysqlnd, php-mbstring, php-zip, php-zlib, php-curl
 Requires:           xorg-x11-fonts-75dpi, xorg-x11-fonts-misc, php-pecl-zip
@@ -57,6 +57,13 @@ install -m 0644 pandora_console_logrotate_centos $RPM_BUILD_ROOT%{_sysconfdir}/l
 rm -rf $RPM_BUILD_ROOT
 
 %post
+# Install pandora_websocket_engine service.
+cp -pf %{prefix}/pandora_console/pandora_websocket_engine /etc/init.d/
+chmod +x /etc/init.d/pandora_websocket_engine
+
+echo "You can now start the Pandora FMS Websocket service by executing"
+echo "   /etc/init.d/pandora_websocket_engine start"
+
 # Has an install already been done, if so we only want to update the files
 # push install.php aside so that the console works immediately using existing
 # configuration.
@@ -79,3 +86,4 @@ fi
 %docdir %{prefix}/pandora_console/docs
 %{prefix}/pandora_console
 %config(noreplace) %{_sysconfdir}/logrotate.d/pandora_console
+%attr(0644, root, root) %{_sysconfdir}/logrotate.d/pandora_console

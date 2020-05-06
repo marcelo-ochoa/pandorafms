@@ -27,8 +27,15 @@ use Thread::Semaphore;
 use Time::Local;
 use XML::Parser::Expat;
 use XML::Simple;
+eval "use POSIX::strftime::GNU;1" if ($^O =~ /win/i);
 use POSIX qw(setsid strftime);
 use IO::Uncompress::Unzip;
+use JSON qw(decode_json);
+use MIME::Base64;
+
+# Required for file names with accents
+use Encode qw(decode);
+use Encode::Locale ();
 
 # For Reverse Geocoding
 use LWP::Simple;
@@ -52,6 +59,7 @@ my %Agents :shared;
 my $Sem :shared;
 my $TaskSem :shared;
 my $AgentSem :shared;
+my $XMLinSem :shared;
 
 ########################################################################################
 # Data Server class constructor.
@@ -68,13 +76,24 @@ sub new ($$;$) {
 	$Sem = Thread::Semaphore->new;
 	$TaskSem = Thread::Semaphore->new (0);
 	$AgentSem = Thread::Semaphore->new (1);
+	$XMLinSem = Thread::Semaphore->new (1);
 	
 	# Call the constructor of the parent class
 	my $self = $class->SUPER::new($config, DATASERVER, \&PandoraFMS::DataServer::data_producer, \&PandoraFMS::DataServer::data_consumer, $dbh);
 
 	# Load external .enc files for XML::Parser.
-	if ($config->{'enc_dir'} ne '' && !grep {$_ eq $config->{'enc_dir'}} @XML::Parser::Expat::Encoding_Path) {
+	if ($config->{'enc_dir'} ne '') {
 		push(@XML::Parser::Expat::Encoding_Path, $config->{'enc_dir'});
+		if ($XML::Simple::PREFERRED_PARSER eq 'XML::SAX::ExpatXS') {
+			push(@XML::SAX::ExpatXS::Encoding::Encoding_Path, $config->{'enc_dir'});
+		}
+	}
+
+	if ($config->{'autocreate_group'} > 0 && !defined(get_group_name ($dbh, $config->{'autocreate_group'}))) {
+		my $msg = "Group id " . $config->{'autocreate_group'} . " does not exist (check autocreate_group config token).";
+		logger($config, $msg, 3);
+		print_message($config, $msg, 1);
+		pandora_event ($config, $msg, 0, 0, 0, 0, 0, 'error', 0, $dbh);
 	}
 
 	bless $self, $class;
@@ -111,6 +130,7 @@ sub data_producer ($) {
 	# Do not read more than max_queue_files files
  	my $file_count = 0;
  	while (my $file = readdir (DIR)) {
+ 		$file = Encode::decode( locale_fs => $file );
 
 		# Data files must have the extension .data
 		next if ($file !~ /^.*[\._]\d+\.data$/);
@@ -142,14 +162,8 @@ sub data_producer ($) {
 		next if ($file !~ /^(.*)[\._]\d+\.data$/);
 		my $agent_name = $1;
 
-		$AgentSem->down ();
-		if (defined ($Agents{$agent_name})) {
-			$AgentSem->up ();
-			next;
-		}
-		$Agents{$agent_name} = 1;
-		$AgentSem->up ();
-
+		next if (agent_lock($pa_config, $agent_name) == 0);
+			
 		push (@tasks, $file);
 	}
 
@@ -167,6 +181,7 @@ sub data_consumer ($$) {
 	my $agent_name = $1;		
 	my $file_name = $pa_config->{'incomingdir'};
 	my $xml_err;
+	my $error;
 	
 	# Fix path
 	$file_name .= "/" unless (substr ($file_name, -1, 1) eq '/');	
@@ -174,9 +189,7 @@ sub data_consumer ($$) {
 
 	# Double check that the file exists
 	if (! -f $file_name) {
-		$AgentSem->down ();
-		delete ($Agents{$agent_name});
-		$AgentSem->up ();
+		agent_unlock($pa_config, $agent_name);
 		return;
 	}
 
@@ -185,30 +198,47 @@ sub data_consumer ($$) {
 
 	for (0..1) {
 		eval {
+			local $SIG{__DIE__};
 			threads->yield;
+			# XML::SAX::ExpatXS is not thread safe.
+			if ($XML::Simple::PREFERRED_PARSER eq 'XML::SAX::ExpatXS') {
+				$XMLinSem->down();
+			}
 
 			$xml_data = XMLin ($file_name, forcearray => 'module');
+
+			if ($XML::Simple::PREFERRED_PARSER eq 'XML::SAX::ExpatXS') {
+				$XMLinSem->up();
+			}
 		};
 	
 		# Invalid XML
-		if ($@ || ref($xml_data) ne 'HASH') {
+		if ($@) {
+			$error = 1;
+			if ($XML::Simple::PREFERRED_PARSER eq 'XML::SAX::ExpatXS') {
+				$XMLinSem->up();
+			}
+		}
+
+		if ($error || ref($xml_data) ne 'HASH') {
+			
 			if ($@) {
 				$xml_err = $@;
 			} else {
 				$xml_err = "Invalid XML format.";
 			}
+
+			logger($pa_config, "Failed to parse $file_name $xml_err", 3);
 			sleep (2);
 			next;
 		}
 
 		# Ignore the timestamp in the XML and use the file timestamp instead
-		$xml_data->{'timestamp'} = strftime ("%Y-%m-%d %H:%M:%S", localtime((stat($file_name))[9])) if ($pa_config->{'use_xml_timestamp'} eq '1' || ! defined ($xml_data->{'timestamp'}));
+		$xml_data->{'timestamp'} = strftime ("%Y-%m-%d %H:%M:%S", localtime((stat($file_name))[9])) if ($pa_config->{'use_xml_timestamp'} eq '0' || ! defined ($xml_data->{'timestamp'}));
 
 		# Double check that the file exists
 		if (! -f $file_name) {
-			$AgentSem->down ();
-			delete ($Agents{$agent_name});
-			$AgentSem->up ();
+			agent_unlock($pa_config, $agent_name);
 			return;
 		}
 
@@ -217,20 +247,20 @@ sub data_consumer ($$) {
 			process_xml_server ($self->getConfig (), $file_name, $xml_data, $self->getDBH ());
 		} elsif (defined($xml_data->{'connection_source'})) {
 			enterprise_hook('process_xml_connections', [$self->getConfig (), $file_name, $xml_data, $self->getDBH ()]);
+		} elsif (defined($xml_data->{'network_matrix'})){
+			process_xml_matrix_network(
+				$self->getConfig(), $xml_data, $self->getDBH()
+			);
 		} else {
 			process_xml_data ($self->getConfig (), $file_name, $xml_data, $self->getServerID (), $self->getDBH ());
 		}
-		$AgentSem->down ();
-		delete ($Agents{$agent_name});
-		$AgentSem->up ();
+		agent_unlock($pa_config, $agent_name);
 		return;	
 	}
 
 	rename($file_name, $file_name . '_BADXML');
 	pandora_event ($pa_config, "Unable to process XML data file '$file_name': $xml_err", 0, 0, 0, 0, 0, 'error', 0, $dbh);
-	$AgentSem->down ();
-	delete ($Agents{$agent_name});
-	$AgentSem->up ();
+	agent_unlock($pa_config, $agent_name);
 }
 
 ###############################################################################
@@ -283,7 +313,7 @@ sub process_xml_data ($$$$$) {
 		my $utimestamp = 0;
 		eval {
 			if ($timestamp =~ /(\d+)[\/|\-](\d+)[\/|\-](\d+) +(\d+):(\d+):(\d+)/) {
-				$utimestamp = timelocal($6, $5, $4, $3, $2 -1 , $1 - 1900);
+				$utimestamp = strftime("%s", $6, $5, $4, $3, $2 -1 , $1 - 1900);
 			}
 		};
 		
@@ -321,6 +351,7 @@ sub process_xml_data ($$$$$) {
 	
 	# Get agent id
 	my $agent_id = get_agent_id ($dbh, $agent_name);
+	my $group_id = 0;
 	if ($agent_id < 1) {
 		if ($pa_config->{'autocreate'} == 0) {
 			logger($pa_config, "ERROR: There is no agent defined with name $agent_name", 3);
@@ -329,33 +360,10 @@ sub process_xml_data ($$$$$) {
 		
 		# Get OS, group and description
 		my $os = pandora_get_os ($dbh, $data->{'os_name'});
-		my $group_id = $pa_config->{'autocreate_group'};
-		if (! defined (get_group_name ($dbh, $group_id))) {
-			if (defined ($data->{'group_id'}) && $data->{'group_id'} ne '') {
-				$group_id = $data->{'group_id'};
-				if (! defined (get_group_name ($dbh, $group_id))) {
-					pandora_event ($pa_config, "Unable to create agent '" . safe_output($agent_name) . "': group ID '" . $group_id . "' does not exist.", 0, 0, 0, 0, 0, 'error', 0, $dbh);
-					logger($pa_config, "Group ID " . $group_id . " does not exist.", 3);
-					return;
-				}
-			} elsif (defined ($data->{'group'}) && $data->{'group'} ne '') {
-				$group_id = get_group_id ($dbh, $data->{'group'});
-				if (! defined (get_group_name ($dbh, $group_id))) {
-					pandora_event ($pa_config, "Unable to create agent '" . safe_output($agent_name) . "': group '" . safe_output($data->{'group'}) . "' does not exist.", 0, 0, 0, 0, 0, 'error', 0, $dbh);
-					logger($pa_config, "Group " . $data->{'group'} . " does not exist.", 3);
-					return;
-				}
-			} else {
-					pandora_event ($pa_config, "Unable to create agent '" . safe_output($agent_name) . "': autocreate_group $group_id does not exist. Edit the server configuration file and change it.", 0, 0, 0, 0, 0, 'error', 0, $dbh);
-					logger($pa_config, "Group id $group_id does not exist (check autocreate_group config token).", 3);
-					return;
-			}
-		}
-
-		# Check the group password.
-		my $rc = enterprise_hook('check_group_password', [$dbh, $group_id, $data->{'group_password'}]);
-		if (defined($rc) && $rc != 1) {
-			logger($pa_config, "Agent $agent_name did not send a valid password for group id $group_id.", 10);
+		$group_id = pandora_get_agent_group($pa_config, $dbh, $agent_name, $data->{'group'}, $data->{'group_password'});
+		if ($group_id <= 0) {
+			pandora_event ($pa_config, "Unable to create agent '" . safe_output($agent_name) . "': No valid group found.", 0, 0, 0, 0, 0, 'error', 0, $dbh);
+			logger($pa_config, "Unable to create agent '" . safe_output($agent_name) . "': No valid group found.", 3);
 			return;
 		}
 
@@ -396,7 +404,7 @@ sub process_xml_data ($$$$$) {
 					
 					# If it exists add the value to the agent
 					if (defined ($custom_field_info)) {
-						my $cf_value = get_tag_value ($custom_field, 'value', '');
+						my $cf_value = safe_input(get_tag_value ($custom_field, 'value', ''));
 
 						my $field_agent;
 						
@@ -482,7 +490,7 @@ sub process_xml_data ($$$$$) {
 						my $custom_field_data = get_db_single_row($dbh, 'SELECT * FROM tagent_custom_data WHERE id_field = ? AND id_agent = ?',
 											$custom_field_info->{"id_field"}, $agent->{"id_agente"});
 
-                                                my $cf_value = get_tag_value ($custom_field, 'value', '');
+                                                my $cf_value = safe_input(get_tag_value ($custom_field, 'value', ''));
 
 						#If not defined we must create if defined just updated
 						if(!defined($custom_field_data)) {
@@ -497,7 +505,7 @@ sub process_xml_data ($$$$$) {
 						} else {
 							
 							db_update ($dbh, "UPDATE tagent_custom_data SET description = ? WHERE id_field = ? AND id_agent = ?",
-									$cf_value ,$custom_field_info->{"id_field"}, $agent->{'id_agente'});
+									$cf_value, $custom_field_info->{"id_field"}, $agent->{'id_agente'});
 						}
                                         }
                                         else {
@@ -594,6 +602,16 @@ sub process_xml_data ($$$$$) {
 
 	# Process snmptrapd modules
 	enterprise_hook('process_snmptrap_data', [$pa_config, $data, $server_id, $dbh]);
+
+	# Process events
+	process_events_dataserver($pa_config, $data, $agent_id, $group_id, $dbh);
+
+	# Process discovery modules
+	enterprise_hook('process_discovery_data', [$pa_config, $data, $server_id, $dbh]);
+
+	# Process command responses
+	enterprise_hook('process_rcmd_report', [$pa_config, $data, $server_id, $dbh, $agent_id, $timestamp]);
+
 }
 
 ##########################################################################
@@ -623,7 +641,7 @@ sub process_module_data ($$$$$$$$$$) {
 	            'unknown_instructions' => '', 'tags' => '', 'critical_inverse' => 0, 'warning_inverse' => 0, 'quiet' => 0,
 				'module_ff_interval' => 0, 'alert_template' => '', 'crontab' =>	'', 'min_ff_event_normal' => 0,
 				'min_ff_event_warning' => 0, 'min_ff_event_critical' => 0, 'ff_timeout' => 0, 'each_ff' => 0, 'module_parent' => 0,
-				'module_parent_unlink' => 0, 'cron_interval' => 0};
+				'module_parent_unlink' => 0, 'cron_interval' => 0, 'ff_type' => 0};
 	
 	# Other tags will be saved here
 	$module_conf->{'extended_info'} = '';
@@ -823,7 +841,7 @@ sub process_module_data ($$$$$$$$$$) {
 	}
 	my $utimestamp;
 	eval {
- 		$utimestamp = timelocal($6, $5, $4, $3, $2 - 1, $1 - 1900);
+ 		$utimestamp = strftime("%s", $6, $5, $4, $3, $2 - 1, $1 - 1900);
 	};
 	if ($@) {
 		logger($pa_config, "Invalid timestamp '$timestamp' from module '$module_name' agent '$agent_name'.", 3);
@@ -960,6 +978,117 @@ sub unlink_modules {
 	# Link them.
     logger($pa_config, "Unlinking parent from module $child_name agent ID $agent_id", 10);
 	db_do($dbh, "UPDATE tagente_modulo SET parent_module_id = 0 WHERE id_agente_modulo = ?", $child_id);
+}
+
+##########################################################################
+# Process events in the XML.
+##########################################################################
+sub process_events_dataserver {
+	my ($pa_config, $data, $agent_id, $group_id, $dbh) = @_;
+
+	return unless defined($data->{'events'}->[0]->{'event'});
+
+	foreach my $event (@{$data->{'events'}->[0]->{'event'}}) {
+		next unless defined($event);
+
+		# Try to decode the base64 inside
+		my $event_info;
+		eval {
+			$event_info = decode_json(decode_base64($event));
+		};
+
+		if ($@) {
+			logger($pa_config, "Error processing base64 event data '$event'.", 5);
+			next;
+		}
+		next unless defined($event_info->{'data'});
+
+		pandora_event(
+			$pa_config,
+			$event_info->{'data'},
+			$group_id,
+			$agent_id,
+			defined($event_info->{'severity'}) ? $event_info->{'severity'} : 0,
+			0,
+			0,
+			'system',
+			0,
+			$dbh
+		);
+	}
+
+	return;
+}
+
+
+##########################################################################
+# Process events in the XML.
+##########################################################################
+sub process_xml_matrix_network {
+	my ($pa_config, $data, $dbh)  = @_;
+
+	my $utimestamp = $data->{'network_matrix'}->[0]->{'utimestamp'};
+	my $content = $data->{'network_matrix'}->[0]->{'content'};
+	return unless defined($utimestamp) && defined($content);
+
+	# Try to decode the base64 inside
+	my $matrix_info;
+	eval {
+		$matrix_info = decode_json(decode_base64($content));
+	};
+
+	if ($@) {
+		logger($pa_config, "Error processing base64 matrix data '$content'.", 5);
+		return;
+	}
+	foreach my $source (keys %$matrix_info) {
+		foreach my $destination (keys %{$matrix_info->{$source}}) {
+			my $matrix_single_data = $matrix_info->{$source}->{$destination};
+			$matrix_single_data->{'source'} = $source;
+			$matrix_single_data->{'destination'} = $destination;
+			$matrix_single_data->{'utimestamp'} = $utimestamp;
+			eval {
+				db_process_insert($dbh, 'id', 'tnetwork_matrix', $matrix_single_data);
+			};
+			if ($@) {
+				logger($pa_config, "Error inserted matrix data. Source: $source, destination: $destination, utimestamp: $utimestamp.", 5);
+			}
+		}
+	}
+
+	return;
+}
+
+##########################################################################
+# Get a lock on the given agent. Return 1 on success, 0 otherwise.
+##########################################################################
+sub agent_lock {
+	my ($pa_config, $agent_name) = @_;
+
+	return 1 if ($pa_config->{'dataserver_lifo'} == 1);
+
+	$AgentSem->down ();
+	if (defined ($Agents{$agent_name})) {
+		$AgentSem->up ();
+		return 0;
+	}
+	$Agents{$agent_name} = 1;
+	$AgentSem->up ();
+
+	return 1;
+}
+
+##########################################################################
+# Remove the lock on the given agent.
+##########################################################################
+sub agent_unlock {
+	my ($pa_config, $agent_name) = @_;
+
+	return if ($pa_config->{'dataserver_lifo'} == 1);
+
+	$AgentSem->down ();
+	delete ($Agents{$agent_name});
+	$AgentSem->up ();
 }
 
 1;

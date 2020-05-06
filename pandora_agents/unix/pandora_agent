@@ -24,6 +24,7 @@ Version 6.0
 use strict;
 use warnings;
 
+use Scalar::Util qw(looks_like_number);
 use POSIX qw(strftime floor);
 use Sys::Hostname;
 use File::Basename;
@@ -31,6 +32,18 @@ use File::Copy;
 use IO::Socket;
 use Sys::Syslog;
 use Time::Local;
+
+my $YAML = 0;
+# Dynamic load. Avoid unwanted behaviour.
+eval {
+	eval 'require YAML::Tiny;1' or die('YAML::Tiny lib not found, commands feature won\'t be available');
+};
+if ($@) {
+	$YAML = 0;
+	print STDERR $@;
+} else {
+	$YAML = 1;
+}
 
 # Agent XML data
 my $Xml;
@@ -41,8 +54,8 @@ my $Sem = undef;
 # Semaphore used to control the number of threads
 my $ThreadSem = undef;
 
-use constant AGENT_VERSION => '7.0NG.729';
-use constant AGENT_BUILD => '181205';
+use constant AGENT_VERSION => '7.0NG.745';
+use constant AGENT_BUILD => '200506';
 
 # Agent log default file size maximum and instances
 use constant DEFAULT_MAX_LOG_SIZE => 600000;
@@ -170,6 +183,7 @@ my %DefaultConf = (
 	'secondary_server_pwd' => '',
 	'secondary_server_ssl' => '0',
 	'secondary_server_opts' => '',
+	'secondary_temporal' => '/var/spool/pandora',
 	'autotime' => 0,
 	'temporal_min_size' => 1,
 	'timezone_offset' => 0,
@@ -187,6 +201,7 @@ my %DefaultConf = (
 	'custom_id' => '',
 	'url_address' => '',
 	'standby' => 0,
+	'cmd_file' => undef,
 );
 my %Conf = %DefaultConf;
 
@@ -239,6 +254,15 @@ my $tentacle_pid = undef;
 # PID of udp_server
 my $udp_server_pid = undef;
 
+# BrokerFlag
+my $BrokerFlag = 0;
+
+# Global loop counter.
+my $LoopCounter = 0;
+
+# Define a max value for loopCounter to avoid overflow.
+use constant MAX_LOOP_COUNTER => 1000000000;
+
 ################################################################################
 # Print usage information and exit.
 ################################################################################
@@ -260,6 +284,91 @@ sub error ($) {
 }
 
 ################################################################################
+# Try to load extra libraries.c
+################################################################################
+sub load_libraries() {
+	# Dynamic load. Avoid unwanted behaviour.
+	eval {eval 'require YAML::Tiny;1' or die('YAML::Tiny lib not found, commands feature won\'t be available');};
+	if ($@) {
+		$YAML = 0;
+		print STDERR $@;
+	} else {
+		$YAML = 1;
+	}
+}
+
+################################################################################
+# Erase blank spaces before and after the string
+################################################################################
+sub trim {
+	my $string = shift;
+	if (empty($string)){
+		return "";
+	}
+
+	$string =~ s/\r//g;
+
+	chomp($string);
+	$string =~ s/^\s+//g;
+	$string =~ s/\s+$//g;
+
+	return $string;
+}
+
+################################################################################
+# Mix hashses
+################################################################################
+sub merge_hashes {
+	my $_h1 = shift;
+	my $_h2 = shift;
+
+	if (ref($_h1) ne "HASH") {
+		return \%{$_h2} if (ref($_h2) eq "HASH");
+	}
+
+	if (ref($_h2) ne "HASH") {
+		return \%{$_h1} if (ref($_h1) eq "HASH");
+	}
+
+	if ((ref($_h1) ne "HASH") && (ref($_h2) ne "HASH")) {
+		return {};
+	}
+
+	my %ret = (%{$_h1}, %{$_h2});
+
+	return \%ret;
+}
+
+################################################################################
+# Empty
+################################################################################
+sub empty {
+	my $str = shift;
+
+	if (!(defined($str)) ){
+		return 1;
+	}
+
+	if(looks_like_number($str)){
+		return 0;
+	}
+
+	if (ref($str) eq "ARRAY") {
+		return (($#{$str}<0)?1:0);
+	}
+
+	if (ref($str) eq "HASH") {
+		my @tmp = keys %{$str};
+		return (($#tmp<0)?1:0);
+	}
+
+	if ($str =~ /^\ *[\n\r]{0,2}\ *$/) {
+		return 1;
+	}
+	return 0;
+}
+
+################################################################################
 # Check a regular expression. Returns 1 if its valid, 0 otherwise.
 ################################################################################
 sub valid_regexp ($) {
@@ -273,6 +382,27 @@ sub valid_regexp ($) {
 	return 0 if ($@);
 	
 	return 1;
+}
+
+################################################################################
+# Reads a file and returns entire content or undef if error.
+################################################################################
+sub read_file {
+	my $path = shift;
+
+	my $_FILE;
+	if( !open($_FILE, "<", $path) ) {
+		# failed to open, return undef
+		return undef;
+	}
+
+	# Slurp configuration file content.
+	my $content = do { local $/; <$_FILE> };
+
+	# Close file
+	close($_FILE);
+
+	return $content;
 }
 
 ################################################################################
@@ -516,11 +646,18 @@ sub parse_conf_modules($) {
 					log_message ('setup', "Invalid regular expression in intensive condition: $line");
 				}
 			}
-		} elsif ($line =~ /^\s*module_crontab\s+(((\*|(\d+(-\d+){0,1}))\s*){5}).*$/) {
+		} elsif ($line =~ /^\s*module_crontab\s+(.*)$/) {
 			my $cron_text = $1;
 			chomp ($cron_text);
+			$cron_text =~ s/\s+$//;
+			# Get module name if is already read.
+			my $module_name_message = "";
+			$module_name_message = " (module $module->{'name'})" if defined($module->{'name'});
 			if (cron_check_syntax($cron_text)) {
 				$module->{'cron'} = $cron_text;
+				log_message('debug', "Cron '$module->{'cron'}' configured $module_name_message.");
+			} else {
+				log_message('setup', "Incorrect cron syntax '$cron_text'. This module$module_name_message will be executed always.");
 			}
 		} elsif ($line =~ /^\s*module_end\s*$/) {
 			
@@ -528,6 +665,12 @@ sub parse_conf_modules($) {
 			
 			# Check for invalid modules
 			next unless (($module->{'name'} ne '' && $module->{'func'} != 0) || $module->{'func'} == \&module_plugin);
+
+			# Skip disabled modules.
+			if (defined($module->{'disabled'}) && $module->{'disabled'} == 1) {
+				log_message('setup', 'Skipping disabled module "' . $module->{'name'} . '"');
+				next;
+			}
 
 			# Set the intensive interval
 			if ($module->{'is_intensive'} == 1) {				
@@ -655,6 +798,8 @@ sub parse_conf_modules($) {
 			$module->{'ff_timeout'} = $1;
 		} elsif ($line =~ /^\s*module_each_ff\s+(\S+)\s*$/) {
 			$module->{'each_ff'} = $1;
+		} elsif ($line =~ /^\s*module_ff_type\s+(\d+)\s*$/) {
+			$module->{'ff_type'} = $1;
 		# Macros
 		} elsif ($line =~ /^\s*module_macro(\S+)\s+(.*)\s*$/) {
 			$module->{'macros'}{$1} = $2;
@@ -752,7 +897,21 @@ sub read_config (;$) {
 		next if ($line =~ /^module\s*\w*/);
 
 		#Configuration token
-		if ($line =~ /^\s*(\S+)\s+(.*)$/) {		
+		if ($line =~ /^\s*(\S+)\s+(.*)$/) {
+			# Reserved keyword.
+			next if ($1 eq "commands");
+
+			if ($1 eq "cmd_file") {
+				# Commands
+				if (ref ($Conf{'commands'}) ne "HASH") {
+					$Conf{'commands'} = {};
+				}
+				# Initialize empty command hash.
+				$Conf{'commands'}->{$2} = {};
+				log_message('setup', "Command required $2");
+				next;
+			}
+
 			log_message ('setup', "$1 is $2");
 			$Conf{$1} = $2;
 			
@@ -899,6 +1058,17 @@ sub read_config (;$) {
 		$Conf{'secondary_server_opts'} = '-x \'' . $Conf{'secondary_server_pwd'} . '\' ' . $Conf{'secondary_server_opts'} if ($Conf{'secondary_server_pwd'} ne '');
 		$Conf{'secondary_server_opts'} = '-c ' . $Conf{'secondary_server_opts'} if ($Conf{'secondary_server_ssl'} eq '1');
 	}
+
+	# Set up the primary and secondary temporary directories.
+	if ($Conf{'secondary_mode'} eq 'always') {
+		$Conf{'secondary_temporal'} = $Conf{'temporal'} . '/pandorafms.secondary';
+		if (! -d $Conf{'secondary_temporal'}) {
+			mkdir($Conf{'secondary_temporal'}) || die("Error creating the secondary temporary directory $!");
+		}
+	} elsif ($Conf{'secondary_mode'} eq "on_error") {
+		$Conf{'secondary_temporal'} = $Conf{'temporal'};
+	}
+
 }
 
 #################################################################################
@@ -918,7 +1088,7 @@ sub fix_directory ($) {
 # Sends a file to the server.
 ################################################################################
 sub send_file {
-	my ($file, $secondary, $rc_primary, $flag_always, $relative) = @_;
+	my ($file, $relative) = @_;
 
 	my $output;
 	my $pid = fork();
@@ -972,104 +1142,82 @@ sub send_file {
 	waitpid ($pid, 0);
 	my $rc = $? >> 8;
 
-	if( ($Conf{'secondary_mode'} eq 'always') && ( !defined($flag_always) ) ){
-		# Send the file to the secondary server
-		return $rc unless ($Conf{'secondary_mode'} eq 'always');
-		
-		if(defined ($secondary)){
-			if( ($rc != 0 && ($file =~ /\.data/))  ){
-				$rc_primary = 1;
-			}
-			swap_servers ();
-			$rc = send_file ($file, undef, $rc_primary, undef, $relative);
-			swap_servers ();
+	return $rc
+}
 
-			return $rc;
-		}
-		else{
-			my $rc_secondary = 0;
-			if( ($rc != 0) && ($file =~ /\.data/)){				
-				$rc_secondary = 1;
-			}
+################################################################################
+# Send buffered XML files.
+################################################################################
+sub send_xml_file ($) {
+	my ($file) = @_;
 
-			if (  $rc_secondary == 1 && defined($rc_primary) ){
-				return 1;
-			}
-			
-			if ( $rc_secondary == 1 ){
-				if (! -d "$Conf{'temporal'}/secondary"){
-					mkdir "$Conf{'temporal'}/secondary";
-				}
-				eval {
-					copy("$file", "$Conf{'temporal'}/secondary/");
-				};
-				if ($@) {
-					# We shouldn't reach this point...
-					die ("Cannot write on $Conf{'temporal'}/secondary/");
-				}
-				return 0;
-			}
-			
-			if ( defined($rc_primary) ){
-				if (! -d "$Conf{'temporal'}/primary"){
-					mkdir "$Conf{'temporal'}/primary";
-				}
-				eval {
-					copy("$file", "$Conf{'temporal'}/primary/");
-				};
-				if ($@) {
-					# We shouldn't reach this point...
-					die ("Cannot write on $Conf{'temporal'}/primary/");
-				}
-				return 0;
-			}
+	my $rc = send_file($file);
+	if ($rc != 0 && $Conf{'secondary_mode'} eq "on_error") {
+		swap_servers();
+		$rc = send_file($file);
+		swap_servers();
+	}
+	elsif ($Conf{'secondary_mode'} eq "always") {
+		swap_servers();
+		my $rc_sec = send_file($file);
+		swap_servers();
 
-			if ( $rc_secondary == 0 && !defined($rc_primary) ){
-				return 0;
-			}
+		# Secondary buffer.
+		if ($rc_sec != 0 && $Conf{'xml_buffer'} == 1 && temporal_freedisk () > $Conf{'temporal_min_size'}) {
+			copy($file, $Conf{'secondary_temporal'}) || die("Error copying file $file to " . $Conf{'secondary_temporal'} . ": $!");
 		}
 	}
-	elsif ( ($Conf{'secondary_mode'} eq 'always') && defined($flag_always) ){
-		return $rc;
-	}
-	else{
-		return $rc unless (defined ($secondary));
 
-		# Send the file to the secondary server
-		return $rc unless ($Conf{'secondary_mode'} eq 'always' || ($Conf{'secondary_mode'} eq 'on_error' && $rc != 0));
-		
-		swap_servers ();
-		$rc = send_file ($file, undef, undef, undef, $relative);
-		swap_servers ();
-		return $rc;
+	# Primary buffer.
+	if ($rc == 0 || $Conf{'xml_buffer'} == 0 || temporal_freedisk () <= $Conf{'temporal_min_size'}) {
+		if ($Conf{'debug'} eq '1') {
+			rename($file, $file . "sent");
+		} else {
+			unlink ($file);
+		}
 	}
 }
 
 ################################################################################
 # Send buffered XML files.
 ################################################################################
-sub send_buffered_xml_files ($;$) {
-	my ($temporal_file, $flag_always) = @_;
+sub send_buffered_xml_files () {
+	my $temp_fh;
+
 	# Read XML files from the temporal directory
-	opendir(TEMPORAL, $temporal_file) or return;
-	if (defined($flag_always) && ($flag_always == 2)){
-		swap_servers ();
-	}
-	while (my $xml_file = readdir(TEMPORAL)) {
+	opendir($temp_fh, $Conf{'temporal'}) or return;
+	while (my $xml_file = readdir($temp_fh)) {
 		# Skip non data files and symlinks
-		next if ($xml_file !~ m/^$Conf{'agent_name'}\.[0-9]+\.data$/ || -l "$temporal_file/$xml_file");
-		my $rc = send_file ("$temporal_file/$xml_file", 1, undef, $flag_always); 
+		next if ($xml_file !~ m/^$Conf{'agent_name'}\.[0-9]+\.data$/ || -l "$Conf{'temporal'}/$xml_file");
+		my $rc = send_file ("$Conf{'temporal'}/$xml_file"); 
 		if ($rc == 0) {	
 			if ($Conf{'debug'} eq '1') {
-				rename "$temporal_file/$xml_file", "$temporal_file/$xml_file". "sent";
+				rename("$Conf{'temporal'}/$xml_file", "$Conf{'temporal'}/$xml_file". "sent");
 			} else {
-				unlink ("$temporal_file/$xml_file");	
+				unlink ("$Conf{'temporal'}/$xml_file");	
 			}
+		} else {
+			last;
 		}
 	}
-	if (defined($flag_always) && ($flag_always == 2)){
-		swap_servers ();
+	closedir($temp_fh);
+
+	# Read XML files from the secondary temporal directory
+	return unless ($Conf{'secondary_mode'} ne "never");
+	opendir($temp_fh, $Conf{'secondary_temporal'}) or return;
+	swap_servers ();
+	while (my $xml_file = readdir($temp_fh)) {
+		# Skip non data files and symlinks
+		next if ($xml_file !~ m/^$Conf{'agent_name'}\.[0-9]+\.data$/ || -l "$Conf{'secondary_temporal'}/$xml_file");
+		my $rc = send_file ("$Conf{'secondary_temporal'}/$xml_file"); 
+		if ($rc == 0) {
+			unlink ("$Conf{'secondary_temporal'}/$xml_file") ;
+		} else {
+			last;
+		}
 	}
+	swap_servers ();
+	closedir($temp_fh);
 }
 
 ################################################################################
@@ -1129,14 +1277,14 @@ sub recv_file {
 		};
 
 		if ($@) {
-			log_message ('error', "Error retrieving file: File transfer command is not responding.");
+			log_message ('error', "Error retrieving file: '.$file.' File transfer command is not responding.");
 			exit 1;
 		}
 
 		# Get the errorlevel
 		my $rc = $? >> 8;
 		if ($rc != 0) {
-			log_message ('error', "Error retrieving file: $output");
+			log_message ('error', "Error retrieving file: '$file' $output");
 		}
 		exit $rc;
 	}
@@ -1178,8 +1326,8 @@ sub check_remote_config () {
 			chown ($uid, $gid, "$Conf{'temporal'}/$RemoteMD5File");
 			chown ($uid, $gid, "$Conf{'temporal'}/$RemoteConfFile");
 		}
-		send_file ("$Conf{'temporal'}/$RemoteConfFile", undef, undef, undef, $Conf{'server_path_conf'});
-		send_file ("$Conf{'temporal'}/$RemoteMD5File", undef, undef, undef, $Conf{'server_path_md5'});
+		send_file ("$Conf{'temporal'}/$RemoteConfFile", $Conf{'server_path_conf'});
+		send_file ("$Conf{'temporal'}/$RemoteMD5File", $Conf{'server_path_md5'});
 		unlink ("$Conf{'temporal'}/$RemoteConfFile");
 		unlink ("$Conf{'temporal'}/$RemoteMD5File");
 		return;
@@ -1204,6 +1352,10 @@ sub check_remote_config () {
 	@Modules = ();
 	%Collections = ();
 	%Conf = %DefaultConf;
+
+	# Supposed to discard current configuration but not.
+	# Cleanup old commands configuration.
+	$Conf{'commands'} = {};
 
 	# Reload the new configuration
 	read_config ();
@@ -1335,6 +1487,336 @@ sub check_collections () {
 }
 
 ################################################################################
+# Check for remote commands defined.
+################################################################################
+sub prepare_commands {
+	if ($YAML == 0) {
+		log_message(
+			'error',
+			'Cannot use commands without YAML dependency, please install it.'
+		);
+		return;
+	}
+
+	# Force configuration file read.
+	my @commands = read_config('cmd_file');
+
+	if (empty(\@commands)) {
+		$Conf{'commands'} = {};
+	} else {
+		foreach my $rcmd (@commands) {
+			$Conf{'commands'}->{trim($rcmd)} = {};
+		}
+	}
+
+	# Cleanup old commands. Not registered.
+	cleanup_old_commands();
+
+	foreach my $ref (keys %{$Conf{'commands'}}) {
+		my $file_content;
+		my $download = 0;
+		my $rcmd_file = $ConfDir.'/commands/'.$ref.'.rcmd';
+
+		# Check for local .rcmd.done files
+		if (-e $rcmd_file.'.done') {
+			# Ignore.
+			delete $Conf{'commands'}->{$ref};
+			next;
+		}
+
+		# Search for local .rcmd file
+		if (-e $rcmd_file) {
+			my $remote_md5_file = $Conf{'temporal'}.'/'.$ref.'.md5';
+
+			$file_content = read_file($rcmd_file);
+			if (recv_file($ref.'.md5', $remote_md5_file) != 0) {
+				# Remote file could not be retrieved, skip.
+				delete $Conf{'commands'}->{$ref};
+				next;
+			}
+
+			my $local_md5 = md5($file_content);
+			my $remote_md5 = md5(read_file($remote_md5_file));
+
+			if ($local_md5 ne $remote_md5) {
+				# Must be downloaded again.
+				$download = 1;
+			}
+		} else {
+			$download = 1;
+		}
+		
+		# Search for remote .rcmd file
+		if ($download == 1) {
+			# Download .rcmd file
+			if (recv_file($ref.'.rcmd') != 0) {
+				# Remote file could not be retrieved, skip.
+				delete $Conf{'commands'}->{$ref};
+				next;
+			} else {
+				# Success
+				move($Conf{'temporal'}.'/'.$ref.'.rcmd', $rcmd_file);
+			}
+		}
+		
+		# Parse and prepare in memory skel.
+		eval {
+			$Conf{'commands'}->{$ref} = YAML::Tiny->read($rcmd_file);
+		};
+		if ($@) {
+			# Failed.
+			log_message('error', 'Failed to decode command. ' . "\n".$@);
+			delete $Conf{'commands'}->{$ref};
+			next;
+		}
+
+	}
+}
+
+################################################################################
+# Command report.
+################################################################################
+sub report_command {
+	my ($ref, $err_level) = @_;
+
+  # Retrieve content from .stdout and .stderr
+	my $stdout_file = $Conf{'temporal'}.'/'.$ref.'.stdout';
+	my $stderr_file = $Conf{'temporal'}.'/'.$ref.'.stderr';
+
+	my $return;
+	eval {
+		$return = {
+			'error_level' => $err_level,
+			'stdout' => read_file($stdout_file),
+			'stderr' => read_file($stderr_file),
+		};
+
+		$return->{'name'} = $Conf{'commands'}->{$ref}->[0]->{'name'};
+	};
+	if ($@) {
+		log_message('error', 'Failed to report command output. ' . $@);
+	}
+
+	# Cleanup
+	unlink($stdout_file) if (-e $stdout_file);
+	unlink($stderr_file) if (-e $stderr_file);
+
+	# Mark command as done.
+	open (my $R_FILE, '> '.$ConfDir.'/commands/'.$ref.'.rcmd.done');
+	print $R_FILE $err_level;
+	close($R_FILE);
+
+
+	$return->{'stdout'} = '' unless defined ($return->{'stdout'});
+	$return->{'stderr'} = '' unless defined ($return->{'stderr'});
+
+	return $return;
+}
+
+################################################################################
+# Cleanup unreferenced rcmd and rcmd.done files.
+################################################################################
+sub cleanup_old_commands {
+	# Cleanup old .rcmd and .rcmd.done files.
+	my %registered = map { $_.'.rcmd' => 1 } keys %{$Conf{'commands'}};
+	if(opendir(my $dir, $ConfDir.'/commands/')) {
+		while (my $item = readdir($dir)) {
+
+			# Skip other files.
+			next if ($item !~ /\.rcmd$/);
+
+			# Clean .rcmd.done file if its command is not referenced in conf.
+			if (!defined($registered{$item})) {
+				if (-e $ConfDir.'/commands/'.$item) {
+					unlink($ConfDir.'/commands/'.$item);
+				}
+				if (-e $ConfDir.'/commands/'.$item.'.done') {
+					unlink($ConfDir.'/commands/'.$item.'.done');
+				}
+			}
+		}
+
+		# Close dir.
+		closedir($dir);
+	}
+
+}
+
+################################################################################
+# Executes a command using defined timeout.
+################################################################################
+sub execute_command_timeout {
+	my ($cmd, $timeout) = @_;
+
+	if (!defined($timeout)
+		|| !looks_like_number($timeout)
+		|| $timeout <= 0
+	) {
+		`$cmd`;
+		return $?>>8;
+	}
+
+	my $remaining_timeout = $timeout;
+
+	my $RET;
+	my $output;
+
+	my $pid = open ($RET, "-|");
+	if (!defined($pid)) {
+		# Failed to fork.
+		log_message('error', '[command] Failed to fork.');
+		return undef;
+	}
+	if ($pid == 0) {
+		# Child.
+		my $ret;
+		eval {
+			local $SIG{ALRM} = sub { die "timeout\n" };
+			alarm $timeout;
+			`$cmd`;
+			alarm 0;
+		};
+
+		my $result = ($?>>8);
+		print $result;
+
+		# Exit child.
+		# Child finishes.
+		exit;
+
+	} else {
+		# Parent waiting.
+		while( --$remaining_timeout > 0 ){
+			if (wait == -1) {
+				last;
+			}
+			# Wait child up to timeout seconds.
+			sleep 1;
+		}
+	}
+
+	if ($remaining_timeout > 0) {
+		# Retrieve output from child.
+		$output = do { local $/; <$RET> };
+		$output = $output>>8;
+	}
+	else {
+		# Timeout expired.
+		return 124;
+	}
+
+	close($RET);
+
+	return $output;
+}
+
+################################################################################
+# Executes a block of commands, returns error level, leaves output in 
+# redirection set by $std_files. E.g:
+# $std_files = ' >>  /tmp/stdout 2>> /tmp/stderr
+################################################################################
+sub execute_command_block {
+	my ($commands, $std_files, $timeout, $retry) = @_;
+
+	return 0 unless defined($commands);
+
+	my $retries = $retry;
+
+	$retries = 1 unless looks_like_number($retries) && $retries > 0;
+
+	my $err_level = 0;
+	$std_files = '' unless defined ($std_files);
+
+	if (ref($commands) ne "ARRAY") {
+		return 0 if $commands eq '';
+
+		do {
+			$err_level = execute_command_timeout(
+				"($commands) $std_files",
+				$timeout
+			);
+
+			# Do not retry if success.
+			last if looks_like_number($err_level) && $err_level == 0;
+		} while ((--$retries) > 0);
+
+	} else {
+		foreach my $comm (@{$commands}) {
+			next unless defined($comm);
+			$retries = $retry;
+			$retries = 1 unless looks_like_number($retries) && $retries > 0;
+
+			do {
+				$err_level = execute_command_timeout(
+					"($comm) $std_files",
+					$timeout
+				);
+
+				# Do not retry if success.
+				last if looks_like_number($err_level) && $err_level == 0;
+
+			} while ((--$retries) > 0);
+
+			# Do not continue evaluating block if failed.
+			last unless ($err_level == 0);
+		}
+	}
+
+	return $err_level;
+}
+
+################################################################################
+# Evalate given command.
+################################################################################
+sub evaluate_command {
+	my ($ref) = @_;
+
+	# Not found.
+	return unless defined $Conf{'commands'}->{$ref};
+
+	# Already completed.
+	return if (-e $ConfDir.'/commands/'.$ref.'.rcmd.done');
+
+	# [0] because how library works.
+	my $cmd = $Conf{'commands'}->{$ref}->[0];
+
+	my $std_files = ' >> '.$Conf{'temporal'}.'/'.$ref.'.stdout ';
+	$std_files .= ' 2>> '.$Conf{'temporal'}.'/'.$ref.'.stderr ';
+
+	# Check preconditions
+	my $err_level;
+	
+	$err_level = execute_command_block(
+		$cmd->{'preconditions'},
+		$std_files,
+		$cmd->{'timeout'}
+	);
+
+	# Precondition not satisfied.
+	return report_command($ref, $err_level) unless ($err_level == 0);
+
+	# Main run.
+	$err_level = execute_command_block(
+		$cmd->{'script'},
+		$std_files,
+		$cmd->{'timeout'}
+	);
+
+	# Script not success.
+	return report_command($ref, $err_level) unless ($err_level == 0);
+
+	# Check postconditions
+	$err_level = execute_command_block(
+		$cmd->{'postconditions'},
+		$std_files,
+		$cmd->{'timeout'}
+	);
+
+	# Return results.
+	return report_command($ref, $err_level);
+}
+
+################################################################################
 # Sleep function
 ################################################################################
 sub sleep_agent {
@@ -1366,6 +1848,7 @@ sub sleep_agent {
 		exit (0);
 	}
 
+	$LoopCounter = ($LoopCounter + 1) % MAX_LOOP_COUNTER;
 	return $iter_base_time;
 }
 
@@ -1680,6 +2163,14 @@ sub exec_module {
 	}
 	
 	# Check module interval
+	if ($BrokerFlag > 0) {
+		if ($LoopCounter == 0) {
+			$module->{'counter'} = $module->{'intensive_interval'};
+		} else {
+			$module->{'counter'} = (($LoopCounter -1 ) % $module->{'intensive_interval'});
+		}
+	}
+
 	if (++($module->{'counter'}) < $module->{'intensive_interval'}) {
 		$ThreadSem->up () if (defined ($ThreadSem) && $Conf{'agent_threads'} > 1);
 		return;
@@ -2094,45 +2585,28 @@ sub cron_next_execution {
 	}
 
 	# Get day of the week and month from cron config
-	my ($mday, $wday) = (split (/\s/, $cron))[2, 4];
+	my ($wday) = (split (/\s/, $cron))[4];
+	# Check the wday values to avoid infinite loop
+	my ($wday_down, $wday_up) = cron_get_interval($wday);
+	if ($wday_down ne "*" && ($wday_down > 6 || (defined($wday_up) && $wday_up > 6))) {
+		log_message('setup', "Invalid cron configuration $cron. Day of the week is out of limits.");
+		$wday = "*";
+	}
 
 	# Get current time and day of the week
 	my $cur_time = time();
 	my $cur_wday = (localtime ($cur_time))[6];
 
-	# Any day of the week
-	if ($wday eq '*') {
-		my $nex_time = cron_next_execution_date ($cron,  $cur_time, $interval);
-		return $nex_time - time();
-	}
-	# A range?
-	else {
-		$wday = cron_get_closest_in_range ($cur_wday, $wday);
+	my $nex_time = cron_next_execution_date ($cron, $cur_time, $interval);
+
+	# Check the day
+	while (!cron_check_interval($wday, (localtime ($nex_time))[6])) {
+		# If it does not acomplish the day of the week, go to the next day.
+		$nex_time += 86400;
+		$nex_time = cron_next_execution_date ($cron, $nex_time, 0);
 	}
 
-	# A specific day of the week
-	my $count = 0;
-	my $nex_time = $cur_time;
-	do {
-		$nex_time = cron_next_execution_date ($cron, $nex_time, $interval);
-		my $nex_time_wd = $nex_time;
-		my ($nex_mon, $nex_wday) = (localtime ($nex_time_wd))[4, 6];
-		my $nex_mon_wd;
-		do {
-			# Check the day of the week
-			if ($nex_wday == $wday) {
-				return $nex_time_wd - time();
-			}
-			
-			# Move to the next day of the month
-			$nex_time_wd += 86400;
-			($nex_mon_wd, $nex_wday) = (localtime ($nex_time_wd))[4, 6];
-		} while ($mday eq '*' && $nex_mon_wd == $nex_mon);
-		$count++;
-	} while ($count < 60);
-
-	# Something went wrong, default to 5 minutes
-	return $interval;
+	return $nex_time - $cur_time;
 }
 
 ###############################################################################
@@ -2144,7 +2618,30 @@ sub cron_check_syntax ($) {
 	return 0 if !defined ($cron);
 	return ($cron =~ m/^(\d|\*|-)+ (\d|\*|-)+ (\d|\*|-)+ (\d|\*|-)+ (\d|\*|-)+$/);
 }
+###############################################################################
+# Check if a value is inside an interval.
+###############################################################################
+sub cron_check_interval {
+	my ($elem_cron, $elem_curr_time) = @_;
 
+	# Return 1 if wildcard.
+	return 1 if ($elem_cron eq "*");
+
+	my ($down, $up) = cron_get_interval($elem_cron);
+	# Check if it is not a range
+	if (!defined($up)) {
+		return ($down == $elem_curr_time) ? 1 : 0;
+	}
+
+	# Check if it is on the range
+	if ($down < $up) {
+		return 0 if ($elem_curr_time < $down || $elem_curr_time > $up);
+	} else {
+		return 0 if ($elem_curr_time < $down && $elem_curr_time > $up);
+	}
+
+	return 1;
+}
 ###############################################################################
 # Get the next execution date for the given cron entry in seconds since epoch.
 ###############################################################################
@@ -2164,15 +2661,11 @@ sub cron_next_execution_date {
 		}
 	}
 
-	# Get current time
-	if (! defined ($cur_time)) {
-		$cur_time = time();
-	}
 	# Check if current time + interval is on cron too
 	my $nex_time = $cur_time + $interval;
 	my ($cur_min, $cur_hour, $cur_mday, $cur_mon, $cur_year) 
 		= (localtime ($nex_time))[1, 2, 3, 4, 5];
-	
+
 	my @cron_array = ($min, $hour, $mday, $mon);
 	my @curr_time_array = ($cur_min, $cur_hour, $cur_mday, $cur_mon);
 	return ($nex_time) if cron_is_in_cron(\@cron_array, \@curr_time_array) == 1;
@@ -2182,8 +2675,7 @@ sub cron_next_execution_date {
 	my @nex_time_array = @curr_time_array;
 
 	# Update minutes
-	my ($min_down, undef) = cron_get_interval ($min);
-	$nex_time_array[0] = ($min_down eq '*') ? 0 : $min_down;
+	$nex_time_array[0] = cron_get_next_time_element($min);
 
 	$nex_time = cron_valid_date(@nex_time_array, $cur_year);
 	if ($nex_time >= $cur_time) {
@@ -2217,8 +2709,7 @@ sub cron_next_execution_date {
 	return $nex_time if cron_is_in_cron(\@cron_array, \@nex_time_array);
 
 	#Update the hour if fails
-	my ($hour_down, undef) = cron_get_interval ($hour);
-	$nex_time_array[1] = ($hour_down eq '*') ? 0 : $hour_down;
+	$nex_time_array[1] = cron_get_next_time_element($hour);
 
 	# When an overflow is passed check the hour update again
 	$nex_time = cron_valid_date(@nex_time_array, $cur_year);
@@ -2246,10 +2737,9 @@ sub cron_next_execution_date {
 	return $nex_time if cron_is_in_cron(\@cron_array, \@nex_time_array);
 
 	#Update the day if fails
-	my ($mday_down, undef) = cron_get_interval ($mday);
-	$nex_time_array[2] = ($mday_down eq '*') ? 1 : $mday_down;
+	$nex_time_array[2] = cron_get_next_time_element($mday, 1);
 
-	# When an overflow is passed check the day update in the next execution
+	# When an overflow is passed check the hour update in the next execution
 	$nex_time = cron_valid_date(@nex_time_array, $cur_year);
 	if ($nex_time >= $cur_time) {
 		return $nex_time if cron_is_in_cron(\@cron_array, \@nex_time_array);
@@ -2269,8 +2759,7 @@ sub cron_next_execution_date {
 	return $nex_time if cron_is_in_cron(\@cron_array, \@nex_time_array);
 
 	#Update the month if fails
-	my ($mon_down, undef) = cron_get_interval ($mon);
-	$nex_time_array[3] = ($mon_down eq '*') ? 0 : $mon_down;
+	$nex_time_array[3] = cron_get_next_time_element($mon);
 
 	# When an overflow is passed check the month update in the next execution
 	$nex_time = cron_valid_date(@nex_time_array, $cur_year);
@@ -2301,23 +2790,30 @@ sub cron_is_in_cron {
 	#If there is no elements means that is in cron
 	return 1 unless (defined($elem_cron) || defined($elem_curr_time));
 
-	# Go to last element if current is a wild card
-	if ($elem_cron ne '*') {
-		my ($down, $up) = cron_get_interval($elem_cron);
-		# Check if there is no a range
-		return 0 if (!defined($up) && ($down != $elem_curr_time));
-		# Check if there is on the range
-		if (defined($up)) {
-			if ($down < $up) {
-				return 0 if ($elem_curr_time < $down || $elem_curr_time > $up);
-			} else {
-				return 0 if ($elem_curr_time > $down || $elem_curr_time < $up);
-			}
-		}
-	}
+	# Check the element interval
+	return 0 unless (cron_check_interval($elem_cron, $elem_curr_time));
+
 	return cron_is_in_cron(\@deref_elems_cron, \@deref_elems_curr_time);
 }
+################################################################################
+#Get the next tentative time for a cron value or interval in case of overflow.
+#Floor data is the minimum localtime data for a position. Ex: 
+#Ex:
+#     * should returns floor data.
+#     5 should returns 5.
+#     10-55 should returns 10.
+#     55-10 should returns elem_down.
+################################################################################
+sub cron_get_next_time_element {
+	# Default floor data is 0
+	my ($curr_element, $floor_data) = @_;
+	$floor_data = 0 unless defined($floor_data);
 
+	my ($elem_down, $elem_up) = cron_get_interval ($curr_element);
+	return ($elem_down eq '*')
+		? $floor_data
+		: $elem_down;
+}
 ###############################################################################
 # Returns the interval of a cron element. If there is not a range,
 # returns an array with the first element in the first place of array
@@ -2367,7 +2863,7 @@ sub cron_valid_date {
 	my $utime;
 	eval {
 		local $SIG{__DIE__} = sub {};
-		$utime = timelocal(0, $min, $hour, $mday, $month, $year);
+		$utime = strftime("%s", 0, $min, $hour, $mday, $month, $year);
 	};
 	if ($@) {
 		return 0;
@@ -2397,6 +2893,7 @@ sub check_module_cron {
 		$interval
 	);
 
+	my $is_first = ($module->{'cron_utimestamp'} == 0) ? 1 : 0;
 	$module->{'cron_utimestamp'} = $now + $time_to_next_execution;
 	$module->{'cron_interval'} = $time_to_next_execution;
 	
@@ -2405,15 +2902,14 @@ sub check_module_cron {
 	}
 
 	# On first execution checking if cron is valid is required
-	return 1 unless ($module->{'cron_utimestamp'} == 0);
+	return 1 unless ($is_first);
 
 	# Check if current timestamp is a valid cron date
-	my $next_execution = cron_next_execution_date(
+	my $next_execution = cron_next_execution(
 		$module->{'cron'},
-		$now - $interval,
-		$interval
+		0
 	);
-	return 1 if ($next_execution == $now);
+	return 1 if (time() + $next_execution == $now);
 	return 0;
 }
 
@@ -2524,6 +3020,7 @@ sub write_module_xml ($@) {
 	$Xml .= "	<min_ff_event_critical>" . $module->{'min_ff_event_critical'} . "</min_ff_event_critical>\n" if (defined ($module->{'min_ff_event_critical'}));
 	$Xml .= "	<ff_timeout>" . $module->{'ff_timeout'} . "</ff_timeout>\n" if (defined ($module->{'ff_timeout'}));
 	$Xml .= "	<each_ff>" . $module->{'each_ff'} . "</each_ff>\n" if (defined ($module->{'each_ff'}));
+	$Xml .= "	<ff_type>" . $module->{'ff_type'} . "</ff_type>\n" if (defined ($module->{'ff_type'}));
 
 	# Data list
 	if ($#data > 0) {
@@ -2938,6 +3435,8 @@ my $iter_base_time = time();
 $LogFileIdx = -1;
 # Loop
 while (1) {
+	load_libraries();
+
 	if (-e $Conf{'logfile'} && (stat($Conf{'logfile'}))[7] > $Conf{'logsize'}) {
 		rotate_log();
 	}
@@ -2952,11 +3451,13 @@ while (1) {
 	# Check file collections
 	check_collections () unless ($Conf{'debug'} eq '1');
 
+	# Check scheduled commands
+	prepare_commands() unless ($Conf{'debug'} eq '1');
+
 	# Launch broker agents
 	@BrokerPid = ();
 	my @broker_agents = read_config ('broker_agent');
 	foreach my $broker_agent (@broker_agents) {
-		
 		# Create broker conf file if it does not exist
 		if (! -e "$ConfDir/${broker_agent}.conf") {
 			write_broker_conf($broker_agent);
@@ -2966,7 +3467,9 @@ while (1) {
 			
 		# Broker agent
 		if ($main_agent == 0) {
-		
+			# Mark broker flag.
+			$BrokerFlag = 1;
+
 			# Set the configuration file
 			$ConfFile = "${broker_agent}.conf";
 			
@@ -3009,10 +3512,10 @@ while (1) {
 			my @address_list;
 
 			if( -x "/bin/ip" || -x "/sbin/ip" || -x "/usr/sbin/ip" ) {
-				@address_list = `ip addr show 2>$DevNull | sed -e '/127.0.0/d' -e '/[0-9]*\\.[0-9]*\\.[0-9]*/!d' -e 's/^[ \\t]*\\([^ \\t]*\\)[ \\t]*\\([^ \\t]*\\)[ \\t].*/\\2/' -e 's/\\/.*//'`;
+				@address_list = `ip addr show 2>$DevNull | sed -e '/127.0.0/d' -e '/\\([0-9][0-9]*\\.\\)\\{3\\}[0-9][0-9]*/!d' -e 's/^[ \\t]*\\([^ \\t]*\\)[ \\t]*\\([^ \\t]*\\)[ \\t].*/\\2/' -e 's/\\/.*//'`;
 			}
 			else {
-				@address_list = `ifconfig -a 2>$DevNull | sed -e '/127.0.0/d' -e '/[0-9]*\\.[0-9]*\\.[0-9]*/!d' -e 's/^[ \\t]*\\([^ \\t]*\\)[ \\t]*\\([^ \\t]*\\)[ \\t].*/\\2/' -e 's/.*://'`;
+				@address_list = `ifconfig -a 2>$DevNull | sed -e '/127.0.0/d' -e '/\\([0-9][0-9]*\\.\\)\\{3\\}[0-9][0-9]*/!d' -e 's/^[ \\t]*\\([^ \\t]*\\)[ \\t]*\\([^ \\t]*\\)[ \\t].*/\\2/' -e 's/.*://'`;
 			}
 
 			for (my $i = 0; $i <= $#address_list; $i++) {		
@@ -3077,6 +3580,24 @@ while (1) {
 		# Execute the module
 		} else {
 			exec_module($module, $Conf{'interval'});
+		}
+	}
+
+	if (ref ($Conf{'commands'}) eq "HASH") {
+		foreach my $command (keys %{$Conf{'commands'}}) {
+			my $result = evaluate_command($command);
+			if (ref($result) eq "HASH") {
+				# Process command result.
+				$Xml .= "<cmd_report>\n";
+				$Xml .= "  <cmd_response>\n";
+				$Xml .= "    <cmd_name><![CDATA[".$result->{'name'}."]]></cmd_name>\n";
+				$Xml .= "    <cmd_key><![CDATA[".$command."]]></cmd_key>\n";
+				$Xml .= "    <cmd_errorlevel><![CDATA[".$result->{'error_level'}."]]></cmd_errorlevel>\n";
+				$Xml .= "    <cmd_stdout><![CDATA[".$result->{'stdout'}."]]></cmd_stdout>\n";
+				$Xml .= "    <cmd_stderr><![CDATA[".$result->{'stderr'}."]]></cmd_stderr>\n";
+				$Xml .= "  </cmd_response>\n";
+				$Xml .= "</cmd_report>\n";
+			}
 		}
 	}
 
@@ -3170,31 +3691,11 @@ while (1) {
 		}
 
 		# Send the XML data file
-		my $rc = send_file ($temp_file, 1);
-		if ($rc == 0 || $Conf{'xml_buffer'} == 0 || temporal_freedisk () < $Conf{'temporal_min_size'}) {
-			if ($Conf{'debug'} eq '1') {
-				rename $temp_file, $temp_file . "sent";
-			} else {
-				unlink ($temp_file);
-			}
-		}
+		send_xml_file ($temp_file);
 		
 		# Send buffered XML data files
 		if ($Conf{'xml_buffer'} == 1) {
-			if($Conf{'secondary_mode'} eq 'always'){
-				$Conf{'__temporal_primary'}   = "$Conf{'temporal'}/primary";
-				$Conf{'__temporal_secondary'} = "$Conf{'temporal'}/secondary";
-				if (-d "$Conf{'__temporal_primary'}"){				
-					send_buffered_xml_files ($Conf{'__temporal_primary'}, 1);
-				}				
-				if (-d "$Conf{'__temporal_secondary'}"){
-					send_buffered_xml_files ($Conf{'__temporal_secondary'}, 2);
-				}
-				send_buffered_xml_files ($Conf{'temporal'});
-			}
-			else{
-				send_buffered_xml_files ($Conf{'temporal'});	
-			}
+			send_buffered_xml_files ();
 		}
 	}
 	

@@ -4,71 +4,77 @@
 // ==================================================
 // Copyright (c) 2005-2011 Artica Soluciones Tecnologicas
 // Please see http://pandorafms.org for full contribution list
-
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation; version 2
-
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
+function include_javascript_d3($return=false)
+{
+    global $config;
 
+    static $is_include_javascript = false;
 
-function include_javascript_d3 ($return = false) {
-	global $config;
-	
-	static $is_include_javascript = false;
-	
-	$output = '';
-	if (!$is_include_javascript) {
-		$is_include_javascript = true;
+    $output = '';
+    if (!$is_include_javascript) {
+        $is_include_javascript = true;
 
-		if (is_metaconsole()) {
-			$output .= '<script type="text/javascript" src="' . '../../' . 'include/javascript/d3.3.5.14.js" charset="utf-8"></script>';
-			$output .= '<script type="text/javascript" src="' . '../../' . 'include/graphs/pandora.d3.js" charset="utf-8"></script>';
-		}
-		else {
-			$output .= '<script type="text/javascript" src="' . $config['homeurl'] . 'include/javascript/d3.3.5.14.js" charset="utf-8"></script>';
-			$output .= '<script type="text/javascript" src="' . $config['homeurl'] . 'include/graphs/pandora.d3.js" charset="utf-8"></script>';
-		}
-	}
+        if (is_metaconsole()) {
+            $output .= '<script type="text/javascript" src="'.$config['homeurl'].'../../include/javascript/d3.3.5.14.js" charset="utf-8"></script>';
+            $output .= '<script type="text/javascript" src="'.$config['homeurl'].'../../include/graphs/pandora.d3.js" charset="utf-8"></script>';
+        } else {
+            $output .= '<script type="text/javascript" src="'.$config['homeurl'].'include/javascript/d3.3.5.14.js" charset="utf-8"></script>';
+            $output .= '<script type="text/javascript" src="'.$config['homeurl'].'include/graphs/pandora.d3.js" charset="utf-8"></script>';
+        }
+    }
 
-	if (!$return)
-		echo $output;
-	
-	return $output;
+    if (!$return) {
+        echo $output;
+    }
+
+    return $output;
 }
 
-function d3_relationship_graph ($elements, $matrix, $unit, $width = 700, $return = false) {
-	global $config;
 
-	if (is_array($elements))
-		$elements = json_encode($elements);
-	if (is_array($matrix))
-		$matrix = json_encode($matrix);
+function d3_relationship_graph($elements, $matrix, $width=700, $return=false)
+{
+    global $config;
 
-	$output = "<div id=\"chord_diagram\"></div>";
-	$output .= include_javascript_d3(true); 
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
-					chordDiagram('#chord_diagram', $elements, $matrix, '$unit', $width);
+    if (is_array($elements)) {
+        $elements = json_encode($elements);
+    }
+
+    if (is_array($matrix)) {
+        $matrix = json_encode($matrix);
+    }
+
+    $output = '<div id="chord_diagram"></div>';
+    $output .= include_javascript_d3(true);
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
+					chordDiagram('#chord_diagram', $elements, $matrix, $width);
 				</script>";
 
-	if (!$return)
-		echo $output;
-	
-	return $output;
+    if (!$return) {
+        echo $output;
+    }
+
+    return $output;
 }
 
-function d3_tree_map_graph ($data, $width = 700, $height = 700, $return = false) {
-	global $config;
 
-	if (is_array($data))
-		$data = json_encode($data);
-	
-	$output = "<div id=\"tree_map\" style='overflow: hidden;'></div>";
-	$output .= include_javascript_d3(true);
-	$output .= "<style type=\"text/css\">
+function d3_tree_map_graph($data, $width=700, $height=700, $return=false)
+{
+    global $config;
+
+    if (is_array($data)) {
+        $data = json_encode($data);
+    }
+
+    $output = "<div id=\"tree_map\" style='overflow: hidden;'></div>";
+    $output .= include_javascript_d3(true);
+    $output .= '<style type="text/css">
 					.cell>rect {
 						pointer-events: all;
 						cursor: pointer;
@@ -112,56 +118,72 @@ function d3_tree_map_graph ($data, $width = 700, $height = 700, $return = false)
 						font-size: 11px;
 						cursor: pointer
 					}
-				</style>";
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
+				</style>';
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
 					treeMap('#tree_map', $data, '$width', '$height');
 				</script>";
 
-	if (!$return)
-		echo $output;
-	
-	return $output;
+    if (!$return) {
+        echo $output;
+    }
+
+    return $output;
 }
 
-function d3_sunburst_graph ($data, $width = 700, $height = 700, $return = false) {
-	global $config;
 
-	if (is_array($data))
-		$data = json_encode($data);
-	
-	$output = "<div id=\"sunburst\" style='overflow: hidden;'></div>";
-	$output .= include_javascript_d3(true);
-	$output .= "<style type=\"text/css\">
+function d3_sunburst_graph($data, $width=700, $height=700, $return=false)
+{
+    global $config;
+
+    if (is_array($data)) {
+        $data = json_encode($data);
+    }
+
+    $output = "<div id=\"sunburst\" style='overflow: hidden;'></div>";
+    $output .= include_javascript_d3(true);
+    $output .= '<style type="text/css">
 					path {
 						stroke: #fff;
 						fill-rule: evenodd;
 					}
-				</style>";
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
+				</style>';
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
 					sunburst('#sunburst', $data, '$width', '$height');
 				</script>";
 
-	if (!$return)
-		echo $output;
-	
-	return $output;
+    if (!$return) {
+        echo $output;
+    }
+
+    return $output;
 }
 
-function d3_bullet_chart($chart_data, $width, $height, $color, $legend,
-	$homeurl, $unit, $font, $font_size) {
-	
-	global $config;
-	
-	$output = '';
-	$output .= include_javascript_d3(true);
-	
-	$id_bullet = uniqid();
-	$font = array_shift(explode(".",array_pop(explode("/",$font))));
 
-	$output .=
-		'<div id="bullet_graph_' . $id_bullet . '" class="bullet" style="overflow: hidden; width: '.$width.'px; margin-left: auto; margin-right: auto;"></div>
+function d3_bullet_chart(
+    $chart_data,
+    $width,
+    $height,
+    $color,
+    $legend,
+    $homeurl,
+    $unit,
+    $font,
+    $font_size
+) {
+    global $config;
+
+    $output = '';
+    $output .= include_javascript_d3(true);
+
+    $output .= '<script language="javascript" type="text/javascript">';
+    $output .= file_get_contents($homeurl.'include/graphs/bullet.js');
+    $output .= '</script>';
+
+    $id_bullet = uniqid();
+    $font = array_shift(explode('.', array_pop(explode('/', $font))));
+
+    $output .= '<div id="bullet_graph_'.$id_bullet.'" class="bullet" style="overflow: hidden; width: '.$width.'px; margin-left: auto; margin-right: auto;"></div>
 		<style>
-			
 			.bullet_graph {
 				font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
 				margin: auto;
@@ -169,10 +191,10 @@ function d3_bullet_chart($chart_data, $width, $height, $color, $legend,
 				position: relative;
 				width: 100%;
 			}
-			
+
 			.bullet { font: 7px sans-serif; }
-			.bullet .marker.s0 { stroke: #FC4444; stroke-width: 2px; }
-			.bullet .marker.s1 { stroke: #FAD403; stroke-width: 2px; }
+			.bullet .marker.s0 { stroke: #e63c52; stroke-width: 2px; }
+			.bullet .marker.s1 { stroke: #f3b200; stroke-width: 2px; }
 			.bullet .marker.s2 { stroke: steelblue; stroke-width: 2px; }
 			.bullet .tick line { stroke: #666; stroke-width: .5px; }
 			.bullet .range.s0 { fill: #ddd; }
@@ -185,42 +207,42 @@ function d3_bullet_chart($chart_data, $width, $height, $color, $legend,
 			.bullet g text { font-size:'.$font_size.'pt;}
 
 		</style>
-		<script src="'. $homeurl . 'include/graphs/bullet.js"></script>
 		<script language="javascript" type="text/javascript">
-		
+
 		var margin = {top: 5, right: 40, bottom: 20, left: 120};
-		
-		width = ('.$width.'+10);
-		height = '.$height.'- margin.top - margin.bottom;
-		
+
+		var width = ('.$width.'+10);
+		var height = '.$height.'- margin.top - margin.bottom;
+
 		var chart = d3.bullet()
 			.width(width)
 			.height(height)
 			.orient("left");
 		';
-	
-	$temp = array();
-	foreach ($chart_data as $data) {
-		if (isset ($data["label"]) ) {
-			$name = io_safe_output($data["label"]);
-		}
-		else
-			$name = io_safe_output($data["nombre"]);
-		$name = ui_print_truncate_text($name, 15, false, true, false, '...', false);
-		$marker = "";
-		if ($data['value'] == 0) {
-			$marker = ", 0";
-		}
-		$temp[] = '{"title":"'.$name.'","subtitle":"'.$data["unit"].'",
-				"ranges":['.((float)$data['max']) .'],"measures":[' .$data['value']. '],
-					"markers":[' .$data['min_warning'].','. $data['min_critical'].$marker.']}';
-	}
-	$output .= 'var data = ['
-	. implode(",",$temp) . '];
+
+    $temp = [];
+    foreach ($chart_data as $data) {
+        if (isset($data['label'])) {
+            $name = io_safe_output($data['label']);
+        } else {
+            $name = io_safe_output($data['nombre']);
+        }
+
+        $name = ui_print_truncate_text($name, 15, false, true, false, '...', false);
+        $marker = '';
+        if ($data['value'] == 0) {
+            $marker = ', 0';
+        }
+
+        $temp[] = '{"title":"'.$name.'","subtitle":"'.$data['unit'].'",
+				"ranges":['.((float) $data['max']).'],"measures":['.$data['value'].'],
+					"markers":['.$data['min_warning'].','.$data['min_critical'].$marker.']}';
+    }
+
+    $output .= 'var data = ['.implode(',', $temp).'];
 	';
-	$output .= '
-		
-		var svg = d3.select("#bullet_graph_' . $id_bullet . '").selectAll("svg")
+    $output .= '
+		var svg = d3.select("#bullet_graph_'.$id_bullet.'").selectAll("svg")
 			.data(data)
 			.enter().append("svg")
 				.attr("class", "bullet")
@@ -229,350 +251,401 @@ function d3_bullet_chart($chart_data, $width, $height, $color, $legend,
 			.append("g")
 				.attr("transform", "translate(" + (margin.left) + "," + margin.top + ")")
 				.call(chart);
-			 
-		
+
 		var title = svg.append("g")
 			.style("text-anchor", "end")
 			.attr("transform", "translate(-10, 15)");
-		
+
 		title.append("text")
 			.attr("class", "'.$font.'")
 			.text(function(d) { return d.title; });
-		
+
 		title.append("text")
-				.attr("class", "subtitle")
-				.attr("dy", "1em")
-				.text(function(d) { return d.subtitle; });
-			
+			.attr("class", "subtitle")
+			.attr("dy", "1em")
+			.text(function(d) { return d.subtitle; });
+
 		$(".tick>text").each(function() {
-			
-			label = $(this).text().replace(/,/g,"");
+			var label = $(this).text().replace(/,/g,"");
 			label = parseFloat(label);
-			text = label.toLocaleString();
+			var text = label.toLocaleString();
 			if ( label >= 1000000)
 				text = text.substring(0,3) + "M";
 			else if (label >= 100000)
 				text = text.substring(0,3) + "K";
 			else if (label >= 1000)
 				text = text.substring(0,2) + "K";
-			
 			$(this).text(text);
 		});
 		</script>';
-	
-	return $output;
-	
+
+    return $output;
+
 }
 
-function d3_gauges($chart_data, $width, $height, $color, $legend,
-				$homeurl, $unit, $font, $font_size, $no_data_image) {
-	global $config;
 
-	if (is_array($chart_data))
-		$data = json_encode($chart_data);
-	$output = include_javascript_d3(true);
-	
-	foreach ($chart_data as $module) {
-		$output .= "<div id='".$module['gauge']."' style='float:left; overflow: hidden; margin-left: 10px;'></div>";
-		
-	}
-	
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
+function d3_gauges(
+    $chart_data,
+    $width,
+    $height,
+    $color,
+    $legend,
+    $homeurl,
+    $unit,
+    $font,
+    $font_size,
+    $no_data_image
+) {
+    global $config;
+
+    if (is_array($chart_data)) {
+        $data = json_encode($chart_data);
+    }
+
+    $output = include_javascript_d3(true);
+
+    foreach ($chart_data as $module) {
+        $output .= "<div class='gauge_d3_class' id='".$module['gauge']."' style='float:left; overflow: hidden; margin-left: 10px;'></div>";
+    }
+
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
 					var data = $data;
 					createGauges(data, '$width', '$height','$font_size','$no_data_image','$font');
 				</script>";
 
-	return $output;
+    return $output;
 }
 
-function ux_console_phases_donut ($phases, $id, $return = false) {
-	global $config;
 
-	foreach ($phases as $i => $phase) {
-		$phases[$i]['phase_name'] = io_safe_output($phase['phase_name']);
+function ux_console_phases_donut(
+    $phases,
+    $id,
+    $width=800,
+    $height=500,
+    $return=false
+) {
+    global $config;
+
+    foreach ($phases as $i => $phase) {
+        $phases[$i]['phase_name'] = io_safe_output($phase['phase_name']);
+    }
+
+    if (is_array($phases)) {
+        $phases = json_encode($phases);
+    }
+
+    $recipient_name = 'phases_donut_'.$id;
+    $recipient_name_to_js = '#phases_donut_'.$id;
+
+    $output = '<div id='.$recipient_name." style='overflow: hidden;'></div>";
+    $output .= include_javascript_d3(true);
+    $output .= '<style type="text/css">
+					path {
+						stroke: #fff;
+						fill-rule: evenodd;
+					}
+				</style>';
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
+					print_phases_donut('".$recipient_name_to_js."', ".$phases.', '.$width.', '.$height.');
+				</script>';
+
+    if ($return === false) {
+        echo $output;
+    }
+
+    return $output;
+}
+
+
+function d3_progress_bar(
+    $id,
+    $percentile,
+    $width,
+    $height,
+    $color,
+    $unit='%',
+    $text='',
+    $fill_color='#FFFFFF',
+    $radiusx=10,
+    $radiusy=10,
+    $transition=1
+) {
+    global $config;
+
+    $recipient_name = 'progress_bar_'.$id;
+    $recipient_name_to_js = '#progress_bar_'.$id;
+
+    $output = '';
+
+    $output .= '<div id='.$recipient_name." style='overflow: hidden;'></div>";
+    $output .= include_javascript_d3(true);
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
+					progress_bar_d3(
+						'".$recipient_name_to_js."',
+						".(int) $percentile.',
+						'.(int) $width.',
+						'.(int) $height.",
+						'".$color."',
+						'".$unit."',
+						'".$text."',
+						'".$fill_color."',
+						".(int) $radiusx.',
+						'.(int) $radiusy.',
+						'.(int) $transition.'
+					);
+				</script>';
+
+    return $output;
+}
+
+
+function d3_progress_bubble($id, $percentile, $width, $height, $color, $unit='%', $text='', $fill_color='#FFFFFF')
+{
+    global $config;
+
+    $recipient_name = 'progress_bubble_'.$id;
+    $recipient_name_to_js = '#progress_bubble_'.$id;
+
+    $output = '';
+
+    $output .= '<div id='.$recipient_name." style='overflow: hidden;'></div>";
+    $output .= include_javascript_d3(true);
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
+					progress_bubble_d3('".$recipient_name_to_js."', ".(int) $percentile.', '.(int) $width.', '.(int) $height.", '".$color."', '".$unit."', '".$text."', '".$fill_color."');
+				</script>";
+
+    return $output;
+}
+
+
+function progress_circular_bar($id, $percentile, $width, $height, $color, $unit='%', $text='', $fill_color='#FFFFFF', $transition=1)
+{
+    global $config;
+
+    $recipient_name = 'circular_progress_bar_'.$id;
+    $recipient_name_to_js = '#circular_progress_bar_'.$id;
+
+    $output = '';
+
+    $output .= '<div id='.$recipient_name." style='overflow: hidden;'></div>";
+    $output .= include_javascript_d3(true);
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
+					print_circular_progress_bar('".$recipient_name_to_js."', ".(int) $percentile.', '.(int) $width.', '.(int) $height.", '".$color."', '".$unit."', '".$text."', '".$fill_color."', '".$transition."');
+				</script>";
+
+    return $output;
+}
+
+
+function progress_circular_bar_interior($id, $percentile, $width, $height, $color, $unit='%', $text='', $fill_color='#FFFFFF')
+{
+    global $config;
+
+    $recipient_name = 'circular_progress_bar_interior_'.$id;
+    $recipient_name_to_js = '#circular_progress_bar_interior_'.$id;
+
+    $output = '';
+
+    $output .= '<div id='.$recipient_name." style='overflow: hidden;'></div>";
+    $output .= include_javascript_d3(true);
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
+					print_interior_circular_progress_bar('".$recipient_name_to_js."', ".(int) $percentile.', '.(int) $width.', '.(int) $height.", '".$color."', '".$unit."', '".$text."', '".$fill_color."');
+				</script>";
+
+    return $output;
+}
+
+
+function d3_donut_graph($id, $width, $height, $module_data, $resume_color)
+{
+    global $config;
+
+    $module_data = json_encode($module_data);
+
+    $recipient_name = 'donut_graph_'.$id;
+    $recipient_name_to_js = '#donut_graph_'.$id;
+
+    $output = '';
+    $output .= '<div id='.$recipient_name." style='overflow: hidden;'></div>";
+    $output .= include_javascript_d3(true);
+    $output .= '<style type="text/css">
+					path {
+						stroke: #fff;
+						fill-rule: evenodd;
+					}
+				</style>';
+
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
+					$('".$recipient_name_to_js."').empty();
+					print_donut_graph('".$recipient_name_to_js."', ".$width.', '.$height.', '.$module_data.", '".$resume_color."');
+				</script>";
+
+    return $output;
+}
+
+
+function print_clock_analogic_1(
+    $time_format,
+    $timezone,
+    $clock_animation,
+    $width,
+    $height,
+    $id_element,
+    $color,
+    $title=true
+) {
+    global $config;
+    $output .= '<style type="text/css">
+		#rim {
+			fill: none;
+			stroke: #999;
+			stroke-width: 3px;
+		}
+
+		.second-hand{
+			stroke-width:3;
+
+		}
+
+		.minute-hand{
+			stroke-width:8;
+			stroke-linecap:round;
+		}
+
+		.hour-hand{
+			stroke-width:12;
+			stroke-linecap:round;
+		}
+
+		.hands-cover{
+			stroke-width:3;
+			fill:#fff;
+		}
+
+		.second-tick{
+			stroke-width:3;
+			fill:#000;
+		}
+
+		.hour-tick{
+			stroke-width:8; //same as the miute hand
+		}
+
+		.second-label{
+			font-size: 12px;
+		}
+
+		.hour-label{
+			font-size: 24px;
+		}
 	}
+	</style>';
 
-	if (is_array($phases))
-		$phases = json_encode($phases);
-	
-	$recipient_name = "phases_donut_" . $id;
-	$recipient_name_to_js = "#phases_donut_" . $id;
+    $tz = $timezone;
+    $timestamp = time();
+    $dt = new DateTime('now', new DateTimeZone($tz));
+    // first argument "must" be a string.
+    $dt->setTimestamp($timestamp);
+    // adjust the object to correct timestamp.
+    $dateTimeZoneOption = new DateTimeZone(date_default_timezone_get());
+    $dateTimeZonePandora = new DateTimeZone($timezone);
 
-	$output = "<div id=" . $recipient_name .  " style='overflow: hidden;'></div>";
-	$output .= include_javascript_d3(true);
-	$output .= "<style type=\"text/css\">
-					path {
-						stroke: #fff;
-						fill-rule: evenodd;
-					}
-				</style>";
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
-					print_phases_donut('" . $recipient_name_to_js . "', " . $phases . ");
+    $dateTimeOption = new DateTime('now', $dateTimeZoneOption);
+    $dateTimePandora = new DateTime('now', $dateTimeZonePandora);
+
+    $timeOffset = $dateTimeZonePandora->getOffset($dateTimeOption);
+
+    $output .= include_javascript_d3(true);
+
+    if ($width == 0) {
+        $date_width = 200;
+    } else {
+        $date_width = $width;
+    }
+
+    if ($title === true) {
+        $output .= '<div style="width:'.$date_width.'px;text-align:center;font-style:italic;font-size:12pt;color:'.$color.'">';
+
+        if ($time_format == 'timedate') {
+            $output .= $dt->format('d / m / Y').' - ';
+        }
+
+        $output .= $dt->format('a').'</div>';
+
+        $timezone_short = explode('/', $timezone);
+        $timezone_short_end = end($timezone_short);
+        $output .= '<div style="width:'.$date_width.'px;text-align:center;font-style:italic;font-size:12pt;color:'.$color.'">'.$timezone_short_end.'</div>';
+    }
+
+    $output .= "<script language=\"javascript\" type=\"text/javascript\">
+					printClockAnalogic1('".$time_format."', '".$timeOffset."', '".$clock_animation."','".$width."','".$height."','".$id_element."','".$color."');
 				</script>";
 
-	if (!$return)
-		echo $output;
-	
-	return $output;
+    return $output;
+
 }
 
-function d3_progress_bar ($id, $percentile, $width, $height, $color, $unit = "%", $text = "", $fill_color = "#FFFFFF") {
-	global $config;
 
-	$recipient_name = "progress_bar_" . $id;
-	$recipient_name_to_js = "#progress_bar_" . $id;
-
-	$output = "";
-
-	$output .= "<div id=" . $recipient_name . " style='overflow: hidden;'></div>";
-	$output .= include_javascript_d3(true);
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
-					progress_bar_d3('" . $recipient_name_to_js . "', " . (int)$percentile . ", " . (int)$width . ", " . (int)$height . ", '" . $color . "', '" . $unit . "', '" . $text . "', '" . $fill_color . "');
-				</script>";
-
-	return $output;
-}
-
-function d3_progress_bubble ($id, $percentile, $width, $height, $color, $unit = "%", $text = "", $fill_color = "#FFFFFF") {
-	global $config;
-
-	$recipient_name = "progress_bubble_" . $id;
-	$recipient_name_to_js = "#progress_bubble_" . $id;
-
-	$output = "";
-
-	$output .= "<div id=" . $recipient_name . " style='overflow: hidden;'></div>";
-	$output .= include_javascript_d3(true);
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
-					progress_bubble_d3('" . $recipient_name_to_js . "', " . (int)$percentile . ", " . (int)$width . ", " . (int)$height . ", '" . $color . "', '" . $unit . "', '" . $text . "', '" . $fill_color . "');
-				</script>";
-
-	return $output;
-}
-
-function progress_circular_bar ($id, $percentile, $width, $height, $color, $unit = "%", $text = "", $fill_color = "#FFFFFF") {
-	global $config;
-
-	$recipient_name = "circular_progress_bar_" . $id;
-	$recipient_name_to_js = "#circular_progress_bar_" . $id;
-
-	$output = "";
-
-	$output .= "<div id=" . $recipient_name . " style='overflow: hidden;'></div>";
-	$output .= include_javascript_d3(true);
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
-					print_circular_progress_bar('" . $recipient_name_to_js . "', " . (int)$percentile . ", " . (int)$width . ", " . (int)$height . ", '" . $color . "', '" . $unit . "', '" . $text . "', '" . $fill_color . "');
-				</script>";
-
-	return $output;
-}
-
-function progress_circular_bar_interior ($id, $percentile, $width, $height, $color, $unit = "%", $text = "", $fill_color = "#FFFFFF") {
-	global $config;
+function print_clock_digital_1($time_format, $timezone, $clock_animation, $width, $height, $id_element, $color)
+{
+    global $config;
+    $output .= '<style type="text/css">
 	
-	$recipient_name = "circular_progress_bar_interior_" . $id;
-	$recipient_name_to_js = "#circular_progress_bar_interior_" . $id;
-
-	$output = "";
-
-	$output .= "<div id=" . $recipient_name .  " style='overflow: hidden;'></div>";
-	$output .= include_javascript_d3(true);
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
-					print_interior_circular_progress_bar('" . $recipient_name_to_js . "', " . (int)$percentile . ", " . (int)$width . ", " . (int)$height . ", '" . $color . "', '" . $unit . "', '" . $text . "', '" . $fill_color . "');
-				</script>";
-
-	return $output;
-}
-
-function d3_donut_graph ($id, $width, $height, $module_data, $resume_color) {
-	global $config;
-
-	$module_data = json_encode($module_data);
-
-	$recipient_name = "donut_graph_" . $id;
-	$recipient_name_to_js = "#donut_graph_" . $id;
-
-	$output = "<div id=" . $recipient_name .  " style='overflow: hidden;'></div>";
-	$output .= include_javascript_d3(true);
-	$output .= "<style type=\"text/css\">
-					path {
-						stroke: #fff;
-						fill-rule: evenodd;
-					}
-				</style>";
-	
-	$output .= "<script language=\"javascript\" type=\"text/javascript\">
-					print_donut_graph('" . $recipient_name_to_js . "', " . $width . ", " . $height . ", " . $module_data . ", '" . $resume_color . "');
-				</script>";
-
-	return $output;
-}
-
-function print_clock_analogic_1 ($time_format, $timezone, $clock_animation,$width,$height,$id_element,$color) {
-	global $config;
-	$output .= "<style type=\"text/css\">
-								body {
-								background: #fff;
-							}
-
-							svg{
-								stroke: #000;
-								font-family: \"HelveticaNeue-Light\", \"Helvetica Neue Light\", \"Helvetica Neue\", Helvetica, Arial, \"Lucida Grande\", sans-serif; 
-							}
-
-							#rim {
-								fill: none;
-								stroke: #999;
-								stroke-width: 3px;
-							}
-
-							.second-hand{
-								stroke-width:3;
-
-							}
-
-							.minute-hand{
-								stroke-width:8;
-								stroke-linecap:round;
-							}
-
-							.hour-hand{
-								stroke-width:12;
-								stroke-linecap:round;
-							}
-
-							.hands-cover{
-								stroke-width:3;
-								fill:#fff;
-							}
-
-							.second-tick{
-								stroke-width:3;
-								fill:#000;	
-							}
-
-							.hour-tick{
-								stroke-width:8; //same as the miute hand
-							}
-
-							.second-label{
-								font-size: 12px;
-							}
-
-							.hour-label{
-								font-size: 24px;
-							}
-					}
-				</style>";
-				
-				$tz = $timezone;
-				$timestamp = time();
-				$dt = new DateTime("now", new DateTimeZone($tz)); //first argument "must" be a string
-				$dt->setTimestamp($timestamp); //adjust the object to correct timestamp
-	
-				$dateTimeZoneOption = new DateTimeZone(date_default_timezone_get());
-				$dateTimeZonePandora = new DateTimeZone($timezone);
-
-				$dateTimeOption = new DateTime("now", $dateTimeZoneOption);
-				$dateTimePandora = new DateTime("now", $dateTimeZonePandora);
-
-				$timeOffset = $dateTimeZonePandora->getOffset($dateTimeOption);
-	
-				$output .= include_javascript_d3(true);
-				
-				if($width == 0){
-					$date_width = 200;
-				}
-				else{
-					$date_width = $width;
-				}
-				
-				$output .= '<div style="width:'.$date_width.'px;text-align:center;font-style:italic;font-size:12pt;color:'.$color.'">';
-				
-				if($time_format == 'timedate'){
-				$output .= $dt->format('d / m / Y').' - ';
-				
-				}
-				
-				$output .= $dt->format('a').'</div>';
-				
-				
-				
-				$output .= "<script language=\"javascript\" type=\"text/javascript\">
-								printClockAnalogic1('" . $time_format . "', '" . $timeOffset . "', '" . $clock_animation . "','" . $width . "','" . $height . "','" . $id_element . "','" . $color . "');
-							</script>";
-				
-				$timezone_short =  explode("/", $timezone);
-				$timezone_short_end = end($timezone_short);
-				
-				$output .= '<div style="width:'.$date_width.'px;text-align:center;font-style:italic;font-size:12pt;color:'.$color.'">'.$timezone_short_end.'</div>';
-
-				return $output;
-	
-	
-}
-
-function print_clock_digital_1 ($time_format, $timezone, $clock_animation,$width,$height,$id_element,$color) {
-	global $config;
-	$output .= "<style type=\"text/css\">
-	
-				#underlay_".$id_element." path,
+				#underlay_'.$id_element.' path,
 				#underlay circle {
 				fill: none;
 				stroke: none;
 				}
 
-				#underlay_".$id_element." .lit {
-				fill: ".$color.";
+				#underlay_'.$id_element.' .lit {
+				fill: '.$color.';
 				stroke: none;
 				}
 
-				#overlay_".$id_element." path,
-				#overlay_".$id_element." circle {
+				#overlay_'.$id_element.' path,
+				#overlay_'.$id_element.' circle {
 				fill: rgba(246, 246, 246, 0.15);
 				stroke: none;
 				}
 
-				#overlay_".$id_element." .lit {
-				fill: ".$color.";
+				#overlay_'.$id_element.' .lit {
+				fill: '.$color.';
 				stroke: none;
 				}
 
-				</style>";
-				
-				$output .= include_javascript_d3(true);
-				$tz = $timezone;
-				$timestamp = time();
-				$dt = new DateTime("now", new DateTimeZone($tz)); //first argument "must" be a string
-				$dt->setTimestamp($timestamp); //adjust the object to correct timestamp
-	
-				$dateTimeZoneOption = new DateTimeZone(date_default_timezone_get());
-				$dateTimeZonePandora = new DateTimeZone($timezone);
+				</style>';
 
-				$dateTimeOption = new DateTime("now", $dateTimeZoneOption);
-				$dateTimePandora = new DateTime("now", $dateTimeZonePandora);
+                $output .= include_javascript_d3(true);
+                $tz = $timezone;
+                $timestamp = time();
+                $dt = new DateTime('now', new DateTimeZone($tz));
+    // first argument "must" be a string
+                $dt->setTimestamp($timestamp);
+    // adjust the object to correct timestamp
+                $dateTimeZoneOption = new DateTimeZone(date_default_timezone_get());
+                $dateTimeZonePandora = new DateTimeZone($timezone);
 
-				$timeOffset = $dateTimeZonePandora->getOffset($dateTimeOption);
-	
-				$output .= include_javascript_d3(true);
+                $dateTimeOption = new DateTime('now', $dateTimeZoneOption);
+                $dateTimePandora = new DateTime('now', $dateTimeZonePandora);
+
+                $timeOffset = $dateTimeZonePandora->getOffset($dateTimeOption);
+
+                $output .= include_javascript_d3(true);
+
+    if ($width == 0) {
+        $date_width = 200;
+    } else {
+        $date_width = $width;
+    }
+
+    if ($time_format == 'timedate') {
+        $output .= '<div style="width:'.$date_width.'px;text-align:center;font-style:italic;font-size:12pt;color:'.$color.'">';
+        $output .= $dt->format('d / m / Y').'</div>';
+    }
+
+                $output .= '
 				
-				if($width == 0){
-					$date_width = 200;
-				}
-				else{
-					$date_width = $width;
-				}
-				
-				if($time_format == 'timedate'){
-					$output .= '<div style="width:'.$date_width.'px;text-align:center;font-style:italic;font-size:12pt;color:'.$color.'">';
-					$output .= $dt->format('d / m / Y').'</div>';
-				}
-				
-				$output .=
-				
-				'
-				
-				<svg width="'.$date_width.'" height="'.($date_width/3.9).'" viewBox="0 0 375 96">
+				<svg width="'.$date_width.'" height="'.($date_width / 3.9).'" viewBox="0 0 375 96">
 				  <g transform="translate(17,0)">
 				    <g class="digit" transform="skewX(-12)">
 				      <path d="M10,8L14,4L42,4L46,8L42,12L14,12L10,8z"/>
@@ -639,20 +712,84 @@ function print_clock_digital_1 ($time_format, $timezone, $clock_animation,$width
 				  </g>
 				</svg>
 				';
-				
-				
-				
-				$output .= "<script language=\"javascript\" type=\"text/javascript\">
-								printClockDigital1('" . $time_format . "', '" . $timeOffset . "', '" . $clock_animation . "','" . $width . "','" . $height . "','" . $id_element . "','" . $color . "');
+
+                $output .= "<script language=\"javascript\" type=\"text/javascript\">
+								printClockDigital1('".$time_format."', '".$timeOffset."', '".$clock_animation."','".$width."','".$height."','".$id_element."','".$color."');
 							</script>";
-							
-				$timezone_short =  explode("/", $timezone);
-				$timezone_short_end = end($timezone_short);
-				
-				$output .= '<div style="width:'.$date_width.'px;text-align:center;font-style:italic;font-size:12pt;color:'.$color.'">'.$timezone_short_end.'</div>';
-				
-				return $output;
-				
+
+                $timezone_short = explode('/', $timezone);
+                $timezone_short_end = end($timezone_short);
+
+                $output .= '<div style="width:'.$date_width.'px;text-align:center;font-style:italic;font-size:12pt;color:'.$color.'">'.$timezone_short_end.'</div>';
+
+                return $output;
+
 }
 
-?>
+
+/**
+ * Print dougnhnut.
+ *
+ * @param array   $colors     Colors.
+ * @param integer $width      Width.
+ * @param integer $height     Height.
+ * @param array   $data       Data.
+ * @param mixed   $data_total Data_total.
+ *
+ * @return string HTML.
+ */
+function print_donut_narrow_graph(
+    array $colors,
+    $width,
+    $height,
+    array $data,
+    $data_total
+) {
+    global $config;
+
+    if (empty($data)) {
+        return graph_nodata_image($width, $height, 'pie');
+    }
+
+    $series = count($data);
+    if (($series != count($colors)) || ($series == 0)) {
+        return '';
+    }
+
+    $data = json_encode($data);
+    $colors = json_encode($colors);
+
+    $graph_id = uniqid('graph_');
+
+    // This is for "Style template" in visual styles.
+    switch ($config['style']) {
+        case 'pandora':
+            $textColor = '#000';
+            $strokeColor = '#fff';
+        break;
+
+        case 'pandora_black':
+            $textColor = '#fff';
+            $strokeColor = '#222';
+        break;
+
+        default:
+            $textColor = '#000';
+            $strokeColor = '#fff';
+        break;
+    }
+
+    $textColor = json_encode($textColor);
+    $strokeColor = json_encode($strokeColor);
+
+    $out = "<div id='$graph_id'></div>";
+    $out .= include_javascript_d3(true);
+    $out .= "<script type='text/javascript'>
+						donutNarrowGraph($colors, $width, $height, $data_total, $textColor, $strokeColor)
+						.donutbody(d3.select($graph_id))
+						.data($data)
+						.render();	
+			</script>";
+
+    return $out;
+}

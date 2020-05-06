@@ -102,8 +102,8 @@ sub data_producer ($) {
 		WHERE server_name = ?
 		AND tagente_modulo.id_agente = tagente.id_agente
 		AND tagente.disabled = 0
-		AND tagente_modulo.id_tipo_modulo > 5
-		AND tagente_modulo.id_tipo_modulo < 19 '
+		AND ((tagente_modulo.id_tipo_modulo > 5 AND tagente_modulo.id_tipo_modulo < 19 )
+			OR (tagente_modulo.id_tipo_modulo > 33 AND tagente_modulo.id_tipo_modulo < 38 )) '
 		. (defined ($network_filter) ? $network_filter : ' ') .
 		'AND tagente_modulo.disabled = 0
 		AND tagente_estado.id_agente_modulo = tagente_modulo.id_agente_modulo
@@ -116,8 +116,8 @@ sub data_producer ($) {
 		AND tagente_modulo.id_agente = tagente.id_agente
 		AND tagente.disabled = 0
 		AND tagente_modulo.disabled = 0
-		AND tagente_modulo.id_tipo_modulo > 5
-		AND tagente_modulo.id_tipo_modulo < 19 '
+		AND ((tagente_modulo.id_tipo_modulo > 5 AND tagente_modulo.id_tipo_modulo < 19 )
+			OR (tagente_modulo.id_tipo_modulo > 33 AND tagente_modulo.id_tipo_modulo < 38 )) '
 		. (defined ($network_filter) ? $network_filter : ' ') .
 		'AND tagente_estado.id_agente_modulo = tagente_modulo.id_agente_modulo
 		AND (tagente_modulo.flag = 1 OR ((tagente_estado.last_execution_try + tagente_estado.current_interval) < UNIX_TIMESTAMP()))
@@ -344,14 +344,20 @@ sub pandora_snmp_get_command ($$$$$$$$$$$) {
 sub pandora_query_snmp ($$$$) {
 	my ($pa_config, $module, $ip_target, $dbh) = @_;
 
+	# Initialize macros.
+	my %macros = (
+		'_agentcustomfield_\d+_' => undef,
+	);
+
+	
 	my $snmp_version = $module->{"tcp_send"}; # (1, 2, 2c or 3)
 	my $snmp3_privacy_method = $module->{"custom_string_1"}; # DES/AES
-	my $snmp3_privacy_pass = safe_output(pandora_output_password($pa_config, $module->{"custom_string_2"}));
+	my $snmp3_privacy_pass = safe_output(pandora_output_password($pa_config, subst_column_macros($module->{"custom_string_2"}, \%macros, $pa_config, $dbh, undef, $module)));
 	my $snmp3_security_level = $module->{"custom_string_3"}; # noAuthNoPriv|authNoPriv|authPriv
-	my $snmp3_auth_user = safe_output($module->{"plugin_user"});
-	my $snmp3_auth_pass = safe_output(pandora_output_password($pa_config, $module->{"plugin_pass"}));
+	my $snmp3_auth_user = safe_output(subst_column_macros($module->{"plugin_user"}, \%macros, $pa_config, $dbh, undef, $module));
+	my $snmp3_auth_pass = safe_output(pandora_output_password($pa_config, subst_column_macros($module->{"plugin_pass"}, \%macros, $pa_config, $dbh, undef, $module)));
 	my $snmp3_auth_method = $module->{"plugin_parameter"}; #MD5/SHA1
-	my $snmp_community = $module->{"snmp_community"};
+	my $snmp_community = safe_output(subst_column_macros($module->{"snmp_community"}, \%macros, $pa_config, $dbh, undef, $module));
 	my $snmp_target = $ip_target;
 	my $snmp_oid = $module->{"snmp_oid"};
 	my $snmp_port = $module->{"tcp_port"};
@@ -378,6 +384,7 @@ sub pandora_query_snmp ($$$$) {
 	my $output; # Command output
 
 	# If not defined, always snmp v1 (standard)
+	$snmp_version = '1' unless defined($snmp_version);
 	if ($snmp_version ne '1' && $snmp_version ne '2' 
 		&& $snmp_version ne '2c' && $snmp_version ne '3') {
 		$snmp_version = '1';
@@ -462,6 +469,15 @@ sub exec_network_module ($$$$) {
 	my $tcp_rcv = $module->{'tcp_rcv'};
 	my $timeout = $module->{'max_timeout'};
 	my $retries = $module->{'max_retries'};
+	my $target_os = pandora_get_os($dbh, $module->{'custom_string_2'});
+
+	if (defined($module->{'custom_string_2'})
+		&& $module->{'custom_string_2'} eq "inherited"
+	) {
+		$target_os = $agent_row->{'id_os'};
+	} elsif (!defined($target_os) || "$target_os" eq '0') {
+		$target_os = $agent_row->{'id_os'};
+	}
 
 	# Use the agent address by default
 	if (! defined($ip_target) || $ip_target eq '' || $ip_target eq 'auto') {
@@ -539,6 +555,32 @@ sub exec_network_module ($$$$) {
 			    $module_result = 1;
 		    }
         }
+
+		# -------------------------------------------------------
+	    # CMD Module
+	    # -------------------------------------------------------
+		elsif (($id_tipo_modulo == 34)
+			|| ($id_tipo_modulo == 35)
+			|| ($id_tipo_modulo == 36)
+			|| ($id_tipo_modulo == 37)) { # CMD Module
+			$module_data = enterprise_hook(
+				'remote_execution_module',
+				[
+					$pa_config,
+					$dbh,
+					$module,
+					$target_os,
+					$ip_target,
+					$tcp_port
+				]
+			);
+			if (!defined($module_data) || "$module_data" eq "") {
+				$module_result = 1;
+			} else {
+				# Success.
+				$module_result = 0;
+			}
+		}
     }
 
 	# Write data section
@@ -550,7 +592,7 @@ sub exec_network_module ($$$$) {
 		my %data = ("data" => $module_data);
 		pandora_process_module ($pa_config, \%data, '', $module, '', $timestamp, $utimestamp, $server_id, $dbh);
 
-		if ($agent_os_version eq ''){
+		if (!defined($agent_os_version) || $agent_os_version eq ''){
 			$agent_os_version = $pa_config->{'servername'}.'_Net';
 		}
 

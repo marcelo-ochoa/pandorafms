@@ -20,6 +20,9 @@ package PandoraFMS::DB;
 use strict;
 use warnings;
 use DBI;
+use Carp qw/croak/;
+
+use lib '/usr/lib/perl5';
 use PandoraFMS::Tools;
 
 #use Data::Dumper;
@@ -55,6 +58,7 @@ our @EXPORT = qw(
 		get_addr_id
 		get_agent_addr_id
 		get_agent_id
+		get_agent_ids_from_alias
 		get_agent_address
 		get_agent_alias
 		get_agent_group
@@ -62,6 +66,7 @@ our @EXPORT = qw(
 		get_agent_module_id
 		get_alert_template_module_id
 		get_alert_template_name
+		get_command_id
 		get_db_rows
 		get_db_rows_limit
 		get_db_single_row
@@ -76,6 +81,8 @@ our @EXPORT = qw(
 		get_module_id
 		get_module_name
 		get_nc_profile_name
+		get_pen_templates
+		get_nc_profile_advanced
 		get_os_id
 		get_os_name
 		get_plugin_id
@@ -210,6 +217,16 @@ sub get_action_id ($$) {
 }
 
 ########################################################################
+## Return command ID given the command name.
+########################################################################
+sub get_command_id ($$) {
+	my ($dbh, $command_name) = @_;
+
+	my $rc = get_db_value ($dbh, "SELECT id FROM talert_commands WHERE name = ?", safe_input($command_name));
+	return defined ($rc) ? $rc : -1;
+}
+
+########################################################################
 ## Return agent ID given the agent name.
 ########################################################################
 sub get_agent_id ($$) {
@@ -217,6 +234,17 @@ sub get_agent_id ($$) {
 
 	my $rc = get_db_value ($dbh, "SELECT id_agente FROM tagente WHERE nombre = ? OR direccion = ?", safe_input($agent_name), $agent_name);
 	return defined ($rc) ? $rc : -1;
+}
+
+########################################################################
+## Return agent IDs given an agent alias.
+########################################################################
+sub get_agent_ids_from_alias ($$) {
+	my ($dbh, $agent_alias) = @_;
+
+	my @rc = get_db_rows ($dbh, "SELECT id_agente, nombre FROM tagente WHERE alias = ?", safe_input($agent_alias));
+
+	return @rc;
 }
 
 ########################################################################
@@ -632,6 +660,48 @@ sub get_nc_profile_name ($$) {
 }
 
 ##########################################################################
+## Return all network component's profile ids matching given PEN.
+##########################################################################
+sub get_pen_templates($$) {
+	my ($dbh, $pen) = @_;
+
+	my @results = get_db_rows(
+		$dbh,
+		'SELECT t.`id_np`
+		 FROM `tnetwork_profile` t
+		 INNER JOIN `tnetwork_profile_pen` pp ON pp.`id_np` = t.`id_np`
+		 INNER JOIN `tpen` p ON pp.pen = p.pen
+		 WHERE p.`pen` = ?',
+		$pen
+	);
+
+	@results = map {
+		if (ref($_) eq 'HASH') { $_->{'id_np'} }
+		else {}
+	} @results;
+
+
+  return @results;
+}
+
+##########################################################################
+## Return a network component's profile data and pen list, given its ID.
+##########################################################################
+sub get_nc_profile_advanced($$) {
+	my ($dbh, $id_nc) = @_;
+	return get_db_single_row(
+		$dbh,
+		'SELECT t.*,GROUP_CONCAT(p.pen) AS "pen"
+		 FROM `tnetwork_profile` t
+		 LEFT JOIN `tnetwork_profile_pen` pp ON t.id_np = pp.id_np
+		 LEFT JOIN `tpen` p ON pp.pen = p.pen
+		 WHERE t.`id_np` = ?
+		 GROUP BY t.`id_np`',
+		$id_nc
+	);
+}
+
+##########################################################################
 ## Return user profile ID given the user id, group id and profile id.
 ##########################################################################
 sub get_user_profile_id ($$$$) {
@@ -869,7 +939,7 @@ sub db_insert ($$$;@) {
 			$insert_id = $dbh->{'mysql_insertid'};
 		}
 		else {
-			die($exception);
+			croak (join(', ', @_));
 		}
 	}
 	
@@ -892,7 +962,7 @@ sub db_update ($$;@) {
 			$rows = $dbh->do($query, undef, @values);
 		}
 		else {
-			die($exception);
+			croak (join(', ', @_));
 		}
 	}
 	
@@ -943,7 +1013,7 @@ sub db_process_insert($$$$;@) {
 		}
 	}
 	my $columns_string = join(',', @columns_array);
-	
+
 	my $res = db_insert ($dbh,
 		$index,
 		"INSERT INTO $table ($columns_string) VALUES " . $wildcards, @values_array);
@@ -1138,7 +1208,7 @@ sub db_do ($$;@) {
 			$dbh->do($query, undef, @values);
 		}
 		else {
-			die($exception);
+			croak (join(', ', @_));
 		}
 	}
 }

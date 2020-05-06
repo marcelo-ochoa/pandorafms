@@ -14,7 +14,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-pandora_version="7.0NG.729-181205"
+pandora_version="7.0NG.745-200506"
 
 package_pear=0
 package_pandora=1
@@ -44,8 +44,15 @@ then
 	whereis dpkg-deb | cut -d":" -f2 | grep dpkg-deb > /dev/null
 	if [ $? = 1 ]
 	then
-		echo "No found \"dpkg-deb\" aplication, please install."
-		exit 1
+		if [ "$DPKG_DEB" == "" ]; then
+			echo "No found \"dpkg-deb\" aplication, please install."
+			exit 1
+		fi
+
+		echo ">> Using dockerized version of dpkg-deb: "
+		echo "  $DPKG_DEB"
+		# Use dockerized app.
+		USE_DOCKER_APP=1
 	else
 		echo "Found \"dpkg-debs\"."
 	fi
@@ -70,15 +77,15 @@ then
 	else
 		echo "Found \"fakeroot\"."
 	fi
-fi
 
-whereis dpkg-buildpackage | cut -d":" -f2 | grep dpkg-buildpackage > /dev/null
-if [ $? = 1 ]
-then
-	echo " \"dpkg-buildpackage\" aplication not found, please install."
-	exit 1
-else
-	echo "Found \"dpkg-buildpackage\"."
+	whereis dpkg-buildpackage | cut -d":" -f2 | grep dpkg-buildpackage > /dev/null
+	if [ $? = 1 ]
+	then
+		echo " \"dpkg-buildpackage\" aplication not found, please install."
+		exit 1
+	else
+		echo "Found \"dpkg-buildpackage\"."
+	fi
 fi
 
 cd ..
@@ -141,7 +148,11 @@ then
 	echo "END"
 
 	echo "Make the package \"Pandorafms console\"."
-	dpkg-deb --build temp_package
+	if [ "$USE_DOCKER_APP" == "1" ]; then 
+		eval $DPKG_DEB --build temp_package
+	else
+		dpkg-deb --build temp_package
+	fi
 	mv temp_package.deb pandorafms.console_$pandora_version.deb
 fi
 
@@ -149,7 +160,7 @@ if [ $package_pear -eq 1 ]
 then
 	echo "Make the package \"php-xml-rpc\"."
 	cd temp_package
-	dh-make-pear --maintainer "Miguel de Dios <miguel.dedios@artica.es>" XML_RPC
+	dh-make-pear --maintainer "ÁRTICA ST <info@artica.es>" XML_RPC
 	cd php-xml-rpc-*
 	dpkg-buildpackage -rfakeroot
 	cd ..
