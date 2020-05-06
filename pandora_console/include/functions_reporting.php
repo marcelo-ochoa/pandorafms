@@ -12282,12 +12282,7 @@ function reporting_sla_get_status_period(
 
 /**
  * @brief Given a period, get the SLA status
- * of the period compare with sla_limit.
- *
- * @param Array An array with all times to calculate the SLA.
- * @param int Limit SLA pass for user.
- * Only used for monthly, weekly And hourly report.
- *
+ * of the period compare with s10264c12039
  * @return integer Status
  */
 function reporting_sla_get_status_period_compliance(
@@ -12312,15 +12307,7 @@ function reporting_sla_get_status_period_compliance(
 
     if ($priority_mode == REPORT_PRIORITY_MODE_OK
         && $sla['time_ok'] > 0 && ($time_compliance >= $sla_limit)
-    ) {
-        return REPORT_STATUS_OK;
-    }
-
-    if ($sla['time_out'] > 0 && ($time_compliance < $sla_limit)) {
-        return REPORT_STATUS_IGNORED;
-    }
-
-    if ($sla['time_downtime'] > 0 && ($time_compliance < $sla_limit)) {
+    ) {10264c12039 < $sla_limit)) {
         return REPORT_STATUS_DOWNTIME;
     }
 
