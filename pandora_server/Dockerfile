@@ -51,9 +51,9 @@ RUN yum -y update && \
 	perl-Geo-IP \
 	perl-Time-HiRes \
 	perl-XML-Twig \
-	perl-Encode-Locale \
 	net-snmp \
-	net-snmp-utils && \
+	net-snmp-utils \
+	https://rpmfind.net/linux/epel/6/x86_64/Packages/p/perl-Encode-Locale-1.03-5.el6.noarch.rpm && \
     yum clean all
 	
 COPY --from=develop /tmp/pandorafms/pandora_server /tmp/pandorafms/pandora_server
