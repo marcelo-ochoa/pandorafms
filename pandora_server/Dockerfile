@@ -48,14 +48,15 @@ RUN yum -y update && \
 	perl-CPAN \
 	perl-JSON \
 	net-snmp-perl \
-	perl-Geo-IP \
 	perl-Time-HiRes \
 	perl-XML-Twig \
 	net-snmp \
 	net-snmp-utils \
-	https://rpmfind.net/linux/epel/6/x86_64/Packages/p/perl-Encode-Locale-1.03-5.el6.noarch.rpm && \
-    yum clean all
-	
+	https://rpmfind.net/linux/epel/6/x86_64/Packages/p/perl-Encode-Locale-1.03-5.el6.noarch.rpm \
+	http://rpmfind.net/linux/centos/6.10/os/x86_64/Packages/gettext-0.17-18.el6.x86_64.rpm \
+	http://ftp.tu-chemnitz.de/pub/linux/dag/redhat/el6/en/x86_64/rpmforge/RPMS/perl-Geo-IP-1.38-1.el6.rf.x86_64.rpm && \
+	yum clean all
+
 COPY --from=develop /tmp/pandorafms/pandora_server /tmp/pandorafms/pandora_server
 
 # Install
