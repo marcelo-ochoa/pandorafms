@@ -9037,78 +9037,6 @@ function reporting_get_stats_indicators($data, $width=280, $height=20, $html=tru
     }
 }
 
-<<<<<<< HEAD
-function reporting_get_stats_alerts($data, $links = false) {
-	global $config;
-	
-	// Link URLS
-	$mobile = false;
-	if (isset($data['mobile'])) {
-		if ($data['mobile']) {
-			$mobile = true;
-		}
-	}
-	
-	if ($mobile) {
-		$urls = array();
-		$urls['monitor_alerts'] = "index.php?page=alerts&status=all_enabled";
-		$urls['monitor_alerts_fired'] = "index.php?page=alerts&status=fired";
-	}
-	else {
-		$urls = array();
-		if ($links) {
-			$urls['monitor_alerts'] = "index.php?sec=estado&sec2=operation/agentes/alerts_status&pure=" . $config['pure'];
-			$urls['monitor_alerts_fired'] = "index.php?sec=estado&sec2=operation/agentes/alerts_status&filter=fired&pure=" . $config['pure'];
-		} else {
-			$urls['monitor_alerts'] = $config['homeurl']."index.php?sec=estado&amp;sec2=operation/agentes/alerts_status&amp;refr=60";
-			$urls['monitor_alerts_fired'] = $config['homeurl']."index.php?sec=estado&amp;sec2=operation/agentes/alerts_status&amp;refr=60&filter=fired";
-		}
-	}
-	
-	// Alerts table
-	$table_al = html_get_predefined_table();
-	
-	$tdata = array();
-	$tdata[0] = html_print_image('images/bell.png', true, array('title' => __('Defined alerts')), false, false, false, true);
-	$tdata[1] = $data["monitor_alerts"] <= 0 ? '-' : $data["monitor_alerts"];
-	$tdata[1] = '<a class="big_data" href="' . $urls["monitor_alerts"] . '">' . $tdata[1] . '</a>';
-	
-	/* Hello there! :)
-We added some of what seems to be "buggy" messages to the openSource version recently. This is not to force open-source users to move to the enterprise version, this is just to inform people using Pandora FMS open source that it requires skilled people to maintain and keep it running smoothly without professional support. This does not imply open-source version is limited in any way. If you check the recently added code, it contains only warnings and messages, no limitations except one: we removed the option to add custom logo in header. In the Update Manager section, it warns about the 'danger’ of applying automated updates without a proper backup, remembering in the process that the Enterprise version comes with a human-tested package. Maintaining an OpenSource version with more than 500 agents is not so easy, that's why someone using a Pandora with 8000 agents should consider asking for support. It's not a joke, we know of many setups with a huge number of agents, and we hate to hear that “its becoming unstable and slow” :(
-You can of course remove the warnings, that's why we include the source and do not use any kind of trick. And that's why we added here this comment, to let you know this does not reflect any change in our opensource mentality of does the last 14 years.
-*/
-	
-	if($data["monitor_alerts"]>$data["total_agents"] && !enterprise_installed()) {
-	$tdata[2] = "<div id='alertagentmodal' class='publienterprise' title='Community version' style=''>" . html_print_image('images/alert_enterprise.png', true, array('title' => __('Enterprise version')), false, false, false, true) . "</div>";	
-	}
-	
-	$tdata[3] = html_print_image('images/bell_error.png', true, array('title' => __('Fired alerts')), false, false, false, true);
-	$tdata[4] = $data["monitor_alerts_fired"] <= 0 ? '-' : $data["monitor_alerts_fired"];
-	$tdata[4] = '<a style="color: ' . COL_ALERTFIRED . ';" class="big_data" href="' . $urls["monitor_alerts_fired"] . '">' . $tdata[4] . '</a>';
-	$table_al->rowclass[] = '';
-	$table_al->data[] = $tdata;
-	
-	if (!is_metaconsole()) {
-		$output = '<fieldset class="databox tactical_set">
-					<legend>' . 
-						__('Defined and fired alerts') . 
-					'</legend>' . 
-					html_print_table($table_al, true) . '</fieldset>';
-	}
-	else {
-		// Remove the defined alerts cause with the new cache table is difficult to retrieve them
-		unset($table_al->data[0][0], $table_al->data[0][1]);
-		
-		$table_al->class = "tactical_view";
-		$table_al->style = array();
-		$output = '<fieldset class="tactical_set">
-					<legend>' . 
-						__('Fired alerts') . 
-					'</legend>' . 
-					html_print_table($table_al, true) . '</fieldset>';
-	}
-	return $output;
-=======
 
 function reporting_get_stats_alerts($data, $links=false)
 {
@@ -9175,7 +9103,6 @@ function reporting_get_stats_alerts($data, $links=false)
     }
 
     return $output;
->>>>>>> upstream/develop
 }
 
 
@@ -12282,7 +12209,12 @@ function reporting_sla_get_status_period(
 
 /**
  * @brief Given a period, get the SLA status
- * of the period compare with s10264c12039
+ * of the period compare with sla_limit.
+ *
+ * @param Array An array with all times to calculate the SLA.
+ * @param int Limit SLA pass for user.
+ * Only used for monthly, weekly And hourly report.
+ *
  * @return integer Status
  */
 function reporting_sla_get_status_period_compliance(
@@ -12307,7 +12239,15 @@ function reporting_sla_get_status_period_compliance(
 
     if ($priority_mode == REPORT_PRIORITY_MODE_OK
         && $sla['time_ok'] > 0 && ($time_compliance >= $sla_limit)
-    ) {10264c12039 < $sla_limit)) {
+    ) {
+        return REPORT_STATUS_OK;
+    }
+
+    if ($sla['time_out'] > 0 && ($time_compliance < $sla_limit)) {
+        return REPORT_STATUS_IGNORED;
+    }
+
+    if ($sla['time_downtime'] > 0 && ($time_compliance < $sla_limit)) {
         return REPORT_STATUS_DOWNTIME;
     }
 
